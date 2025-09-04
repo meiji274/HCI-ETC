@@ -1,0 +1,14 @@
+{
+  "name": "test1",
+  "version": "1.0.0",
+  "description": "testing running python script using node",
+  "main": "index.js",
+  "scripts": {
+    "test": "hello"
+  },
+  "author": "Meiji",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}
