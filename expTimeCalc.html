@@ -1,6 +1,7 @@
 <!DOCTYPE HTML>
 <html>
   <head>
+    <meta charset="UTF-8" />
     <style type="text/css">
         /* fieldset.inline {
           display: inline;
@@ -32,27 +33,24 @@
         .margin-right {margin-right: 20px;}
         .align-text{text-align: center;}
         .hidden{display: none;}
-        .shown{display: in-line;}
+        .shown{display: block; margin: 0 auto; text-align: center; }
     </style>
     <title>expTimeCalc.html</title>
-    <meta charset = "UTF-8" />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <script type="text/javascript" src="scripts/expTimeCalc.js"></script> 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
-    <script data-main="scripts/expTimeCalc" src="scripts/require.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js" defer></script>
+    <script type="text/javascript" src="scripts/expTimeCalc.js" defer></script> 
   </head>
   <body style="font-family: sans-serif">
-    <div name="title_div" id="title_div"><h1>Exposure Time Calculator</h1></div>
+    <div name="title_div" id="title_div"><h1>Polarimetry Mode Exposure Time Calculator</h1></div>
     <p>
-        <img src="/home/mmnguyen/Research/ExpTimeCalc/etc_pic1.png" name="myImage">
-        <form method="" action="" name="myForm">
+        <img  id="myImage" name="myImage" src="etc_pic1.png" name="myImage">
             <fieldset name="instrumentBox" id="instrumentBox" style="width:290px;height:100px" class="margin-auto align-text">
                 <legend><h2>Choose an Instrument</h2></legend>
                 <select name="instrument" id="instrument" onchange="chooseInstrument();switchImage();">
                     <optgroup>
-                        <option name="NIRC2" value="1">NIRC2</option>
-                        <option name="SCALES" value="2">SCALES</option>
-                        <option name="PSI" value="3">PSI</option>
+                        <option name="NIRC2" value="0">NIRC2</option>
+                        <option name="SCALES" value="1">SCALES</option>
+                        <option name="PSI" value="2">PSI</option>
                     </optgroup>
                 </select>
             </fieldset>
@@ -75,11 +73,11 @@
                 <option name="kappa And b" value="kappa And b">kappa And b</option>
                 <option name="1RXJ 1609 B" value="1RXJ 1609 B">1RXJ 1609 B</option>
                 <option name="GSC 06214 B" value="GSC 06214 B">GSC 06214 B</option>
-                <option name="USco CTIO 108 B" value="USco CTIO 108 B">USco CTIO 108 B</option>
+                <option name="USco CTIO108 B" value="USco CTIO108 B">USco CTIO 108 B</option>
                 <option name="HIP 78530 B" value="HIP 78530 B">HIP 78530 B</option>
                 <option name="2M 1207 B" value="2M 1207 B">2M 1207 B</option>
-                <option name="2M 1207 A" value="2M 1207 A">HR 8799 b</option>
-                <option name="TWA 5B" value="TWA 5B">TWA 5B</option>
+                <option name="2M 1207 A" value="2M 1207 A">2M 1207 A</option>
+                <option name="TWA 5 B" value="TWA 5 B">TWA 5B</option>
                 <option name="HR 7329 B" value="HR 7329 B">HR 7329 B</option>
                 <option name="PZ Tel B" value="PZ Tel B">PZ Tel B</option>
                 <option name="2M0103AB B" value="2M0103AB B">2M0103AB B</option>
@@ -191,9 +189,9 @@
             <p>
                 <label for="array_size">Array Window Size:</label>
                 <select name="array_size" id="array_size">
-                    <option name="1024^2" value=1024>1024^2</option>
-                    <option value="512^2" value=512>512^2</option>
-                    <option value="256^2" value=256>256^2</option>
+                    <option value="1024">1024^2</option>
+                    <option value="512">512^2</option>
+                    <option value="256">256^2</option>
                 </select>
             </p>
             <p>
@@ -214,13 +212,13 @@
     </div>
     <br>
     <p>
-        Input Clear Spectra <input type="file" id="spectraClear" name="spectraClear" enctype="multipart/form-data" />
+        Input Clear Spectra <input type="file" id="spectraClear" name="spectraClear" accept=".txt,.csv" />
         <br>
         <br>
-        Input Cloudy Spectra <input type="file" id="spectraCloudy" name="spectraCloudy" enctype="multipart/form-data" />
+        Input Cloudy Spectra <input type="file" id="spectraCloudy" name="spectraCloudy" accept=".txt,.csv" />
         <br>
         <br>
-        <button type="button" onclick="doCalc();plot_snr();plot_pol_snr();plot_spectraClear();plot_contrast()">Update Calculation</button>
+        <button type="button" onclick="doCalc()">Update Calculation</button>
         <br>
     </p>
 
@@ -246,721 +244,25 @@
 
     <br>
 
-    <fieldset style="width:350px;" class="hidden">
-        <p> <input type = "number" name="snr1" id = "snr1">
-            <input type = "number" name="snr2" id = "snr2">
-            <input type = "number" name="snr3" id = "snr3">
-            <input type = "number" name="snr4" id = "snr4">
-            <input type = "number" name="snr5" id = "snr5">
-            <input type = "number" name="snr6" id = "snr6">
-            <input type = "number" name="snr7" id = "snr7">
-            <input type = "number" name="snr8" id = "snr8">
-            
-            <input type = "number" name="polFrac1" id = "polFrac1">
-            <input type = "number" name="polFrac2" id = "polFrac2">
-            <input type = "number" name="polFrac3" id = "polFrac3">
-            <input type = "number" name="polFrac4" id = "polFrac4">
-            <input type = "number" name="polFrac5" id = "polFrac5">
-            <input type = "number" name="polFrac6" id = "polFrac6">
-            <input type = "number" name="polFrac7" id = "polFrac7">
-            <input type = "number" name="polFrac8" id = "polFrac8">
-
-            <input type = "number" name="minExpTime1" id = "minExpTime1">
-            <input type = "number" name="minExpTime2" id = "minExpTime2">
-            <input type = "number" name="minExpTime3" id = "minExpTime3">
-            <input type = "number" name="minExpTime4" id = "minExpTime4">
-            <input type = "number" name="minExpTime5" id = "minExpTime5">
-            <input type = "number" name="minExpTime6" id = "minExpTime6">
-            <input type = "number" name="minExpTime7" id = "minExpTime7">
-            <input type = "number" name="minExpTime8" id = "minExpTime8">
-
-            <input type = "number" name="totalInt" id = "totalInt">
-
-            <input type = "number" name="spectraClear1" id = "spectraClear1">
-            <input type = "number" name="spectraClear2" id = "spectraClear2">
-            <input type = "number" name="spectraClear3" id = "spectraClear3">
-            <input type = "number" name="spectraClear4" id = "spectraClear4">
-            <input type = "number" name="spectraClear5" id = "spectraClear5">
-            <input type = "number" name="spectraClear6" id = "spectraClear6">
-            <input type = "number" name="spectraClear7" id = "spectraClear7">
-            <input type = "number" name="spectraClear8" id = "spectraClear8">
-            <input type = "number" name="spectraClear9" id = "spectraClear9">
-            <input type = "number" name="spectraClear10" id = "spectraClear10">
-            <input type = "number" name="spectraClear11" id = "spectraClear11">
-            <input type = "number" name="spectraClear12" id = "spectraClear12">
-            <input type = "number" name="spectraClear13" id = "spectraClear13">
-            <input type = "number" name="spectraClear14" id = "spectraClear14">
-            <input type = "number" name="spectraClear15" id = "spectraClear15">
-            <input type = "number" name="spectraClear16" id = "spectraClear16">
-            <input type = "number" name="spectraClear17" id = "spectraClear17">
-            <input type = "number" name="spectraClear18" id = "spectraClear18">
-            <input type = "number" name="spectraClear19" id = "spectraClear19">
-            <input type = "number" name="spectraClear20" id = "spectraClear20">
-            <input type = "number" name="spectraClear21" id = "spectraClear21">
-            <input type = "number" name="spectraClear22" id = "spectraClear22">
-            <input type = "number" name="spectraClear23" id = "spectraClear23">
-            <input type = "number" name="spectraClear24" id = "spectraClear24">
-            <input type = "number" name="spectraClear25" id = "spectraClear25">
-            <input type = "number" name="spectraClear26" id = "spectraClear26">
-            <input type = "number" name="spectraClear27" id = "spectraClear27">
-            <input type = "number" name="spectraClear28" id = "spectraClear28">
-            <input type = "number" name="spectraClear29" id = "spectraClear29">
-            <input type = "number" name="spectraClear30" id = "spectraClear30">
-            <input type = "number" name="spectraClear31" id = "spectraClear31">
-            <input type = "number" name="spectraClear32" id = "spectraClear32">
-            <input type = "number" name="spectraClear33" id = "spectraClear33">
-            <input type = "number" name="spectraClear34" id = "spectraClear34">
-            <input type = "number" name="spectraClear35" id = "spectraClear35">
-            <input type = "number" name="spectraClear36" id = "spectraClear36">
-            <input type = "number" name="spectraClear37" id = "spectraClear37">
-            <input type = "number" name="spectraClear38" id = "spectraClear38">
-            <input type = "number" name="spectraClear39" id = "spectraClear39">
-            <input type = "number" name="spectraClear40" id = "spectraClear40">
-
-            <input type = "number" name="spectraCloudy1" id = "spectraCloudy1">
-            <input type = "number" name="spectraCloudy2" id = "spectraCloudy2">
-            <input type = "number" name="spectraCloudy3" id = "spectraCloudy3">
-            <input type = "number" name="spectraCloudy4" id = "spectraCloudy4">
-            <input type = "number" name="spectraCloudy5" id = "spectraCloudy5">
-            <input type = "number" name="spectraCloudy6" id = "spectraCloudy6">
-            <input type = "number" name="spectraCloudy7" id = "spectraCloudy7">
-            <input type = "number" name="spectraCloudy8" id = "spectraCloudy8">
-            <input type = "number" name="spectraCloudy9" id = "spectraCloudy9">
-            <input type = "number" name="spectraCloudy10" id = "spectraCloudy10">
-            <input type = "number" name="spectraCloudy11" id = "spectraCloudy11">
-            <input type = "number" name="spectraCloudy12" id = "spectraCloudy12">
-            <input type = "number" name="spectraCloudy13" id = "spectraCloudy13">
-            <input type = "number" name="spectraCloudy14" id = "spectraCloudy14">
-            <input type = "number" name="spectraCloudy15" id = "spectraCloudy15">
-            <input type = "number" name="spectraCloudy16" id = "spectraCloudy16">
-            <input type = "number" name="spectraCloudy17" id = "spectraCloudy17">
-            <input type = "number" name="spectraCloudy18" id = "spectraCloudy18">
-            <input type = "number" name="spectraCloudy19" id = "spectraCloudy19">
-            <input type = "number" name="spectraCloudy20" id = "spectraCloudy20">
-            <input type = "number" name="spectraCloudy21" id = "spectraCloudy21">
-            <input type = "number" name="spectraCloudy22" id = "spectraCloudy22">
-            <input type = "number" name="spectraCloudy23" id = "spectraCloudy23">
-            <input type = "number" name="spectraCloudy24" id = "spectraCloudy24">
-            <input type = "number" name="spectraCloudy25" id = "spectraCloudy25">
-            <input type = "number" name="spectraCloudy26" id = "spectraCloudy26">
-            <input type = "number" name="spectraCloudy27" id = "spectraCloudy27">
-            <input type = "number" name="spectraCloudy28" id = "spectraCloudy28">
-            <input type = "number" name="spectraCloudy29" id = "spectraCloudy29">
-            <input type = "number" name="spectraCloudy30" id = "spectraCloudy30">
-            <input type = "number" name="spectraCloudy31" id = "spectraCloudy31">
-            <input type = "number" name="spectraCloudy32" id = "spectraCloudy32">
-            <input type = "number" name="spectraCloudy33" id = "spectraCloudy33">
-            <input type = "number" name="spectraCloudy34" id = "spectraCloudy34">
-            <input type = "number" name="spectraCloudy35" id = "spectraCloudy35">
-            <input type = "number" name="spectraCloudy36" id = "spectraCloudy36">
-            <input type = "number" name="spectraCloudy37" id = "spectraCloudy37">
-            <input type = "number" name="spectraCloudy38" id = "spectraCloudy38">
-            <input type = "number" name="spectraCloudy39" id = "spectraCloudy39">
-            <input type = "number" name="spectraCloudy40" id = "spectraCloudy40">
-
-            <input type = "number" name="contrast1" id = "contrast1">
-            <input type = "number" name="contrast2" id = "contrast2">
-            <input type = "number" name="contrast3" id = "contrast3">
-            <input type = "number" name="contrast4" id = "contrast4">
-            <input type = "number" name="contrast5" id = "contrast5">
-            <input type = "number" name="contrast6" id = "contrast6">
-            <input type = "number" name="contrast7" id = "contrast7">
-            <input type = "number" name="contrast8" id = "contrast8">
-            <input type = "number" name="contrast9" id = "contrast9">
-            <input type = "number" name="contrast10" id = "contrast10">
-            <input type = "number" name="contrast11" id = "contrast11">
-            <input type = "number" name="contrast12" id = "contrast12">
-            <input type = "number" name="contrast13" id = "contrast13">
-            <input type = "number" name="contrast14" id = "contrast14">
-            <input type = "number" name="contrast15" id = "contrast15">
-            <input type = "number" name="contrast16" id = "contrast16">
-            <input type = "number" name="contrast17" id = "contrast17">
-            <input type = "number" name="contrast18" id = "contrast18">
-            <input type = "number" name="contrast19" id = "contrast19">
-            <input type = "number" name="contrast20" id = "contrast20">
-        </p>
-    </fieldset>
-
     <div class="flex-parent jc-center">
         <fieldset style="width:550px;height:430px;float:left">
         <canvas id="snrChart" width="500" height="400"></canvas>
-        <script>
-            function plot_snr() {
-                var target_name = document.getElementById('Target');
-                var target_text = target_name.options[target_name.selectedIndex].value;
-
-                var ctx = document.getElementById('snrChart').getContext('2d');
-                var scatterChart = new Chart(ctx, {
-                    type: 'scatter',
-                    data: {
-                        datasets: [{
-                            label: target_text,
-                            data: [{
-                                    x: 0,
-                                    y: 0
-                                }, {
-                                    x: parseFloat(document.getElementById("totalInt").value)/4,
-                                    y: document.getElementById("snr1").value
-                                }, {
-                                    x: parseFloat(document.getElementById("totalInt").value)/2,
-                                    y: document.getElementById("snr2").value
-                                }, {
-                                    x: 3*parseFloat(document.getElementById("totalInt").value)/4,
-                                    y: document.getElementById("snr3").value
-                                }, {
-                                    x: parseFloat(document.getElementById("totalInt").value),
-                                    y: document.getElementById("snr4").value
-                                }, {
-                                    x: 5*parseFloat(document.getElementById("totalInt").value)/4,
-                                    y: document.getElementById("snr5").value
-                                }, {
-                                    x: 3*parseFloat(document.getElementById("totalInt").value)/2,
-                                    y: document.getElementById("snr6").value
-                                }, {
-                                    x: 7*parseFloat(document.getElementById("totalInt").value)/4,
-                                    y: document.getElementById("snr7").value
-                                }, {
-                                    x: 2*parseFloat(document.getElementById("totalInt").value),
-                                    y: document.getElementById("snr8").value
-                                }],
-                            showLine: true,
-                            pointStyle: 'line',
-                            pointBackgroundColor: 'black',
-                            borderColor: 'black',
-                            fill: false
-                        }]
-                    },
-                    options: {
-                        title: {
-                            display: true,
-                            text: 'SNR v. Exposure Time (s)',
-                            fontSize: 20
-                        },
-                        responsive: false,
-                        scales: {
-                            xAxes: [{
-                                scaleLabel: {
-                                    display: true,
-                                    labelString: 'Exposure Time (s)'
-                                },
-                                type: 'linear',
-                                position: 'bottom'
-                            }],
-
-                            yAxes: [{
-                                scaleLabel: {
-                                    display: true,
-                                    labelString: 'SNR'
-                                },
-                                type: 'linear',
-                                position: 'left'
-                            }]
-                        }
-                    }
-                });
-                scatterChart.clear();
-            };   
-        </script>
         </fieldset>
 
         <fieldset style="width:550px;height:430px">
             <canvas id="snrPolChart" width="500" height="400"></canvas>
-            <script>
-                function plot_pol_snr() {
-                    var target_name = document.getElementById('Target');
-                    var target_text = target_name.options[target_name.selectedIndex].value;
-
-                    var ctx = document.getElementById('snrPolChart').getContext('2d');
-                    var scatterChart = new Chart(ctx, {
-                        type: 'scatter',
-                        data: {
-                            datasets: [{
-                                label: target_text,
-                                data: [{
-                                    x: document.getElementById("minExpTime1").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac1").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime2").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac2").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime3").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac3").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime4").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac4").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime5").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac5").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime6").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac6").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime7").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac7").value)*100
-                                }, {
-                                    x: document.getElementById("minExpTime8").value/3600.,
-                                    y: parseFloat(document.getElementById("polFrac8").value)*100
-                                }],
-                                showLine: true,
-                                pointStyle: 'line',
-                                pointBackgroundColor: 'red',
-                                borderColor: 'red',
-                                fill: false
-                            }],  
-                        },
-                        options: {
-                            title: {
-                            display: true,
-                            text: 'Polarization Fraction (%) vs. Minimum Detection Exposure Time (hr)',
-                            fontSize: 20
-                            },
-                            responsive: false,
-                            scales: {
-                                xAxes: [{
-                                    scaleLabel: {
-                                        display: true,
-                                        labelString: 'Minimum Detection Threshold Exposure Time (hr)'
-                                    },
-                                    type: 'linear',
-                                    position: 'bottom'
-                                }],
-        
-                                yAxes: [{
-                                    scaleLabel: {
-                                        display: true,
-                                        labelString: 'Polarization Fraction (%)'
-                                    },
-                                    type: 'linear',
-                                    position: 'left'
-                                }]
-                            }
-                        }
-                    });
-                    scatterChart.clear();
-                };
-            </script>
-            </fieldset>
+        </fieldset>
     </div>
             <br>
 
         <div class="flex-parent jc-center">
             <fieldset style="width:550px;height:430px;float:left">
                 <canvas id="spectraClearChart" width="500" height="400"></canvas>
-                <script>
-                    function plot_spectraClear() {
-                        var target_name = document.getElementById('Target');
-                        var target_text = target_name.options[target_name.selectedIndex].id;
-        
-                        var ctx = document.getElementById('spectraClearChart').getContext('2d');
-                        var scatterChart = new Chart(ctx, {
-                            type: 'scatter',
-                            data: {
-                                datasets: [{
-                                    label: 'Clear target atmosphere',
-                                    data: [{
-                                            x: 600,
-                                            y: document.getElementById("spectraClear1").value
-                                        }, {
-                                            x: 606.41025641,
-                                            y: document.getElementById("spectraClear2").value
-                                        }, {
-                                            x: 612.82051282,
-                                            y: document.getElementById("spectraClear3").value
-                                        }, {
-                                            x: 619.23076923,
-                                            y: document.getElementById("spectraClear4").value
-                                        }, {
-                                            x: 625.64102564,
-                                            y: document.getElementById("spectraClear5").value
-                                        }, {
-                                            x: 632.05128205,
-                                            y: document.getElementById("spectraClear6").value
-                                        }, {
-                                            x: 638.46153846,
-                                            y: document.getElementById("spectraClear7").value
-                                        }, {
-                                            x: 644.87179487,
-                                            y: document.getElementById("spectraClear8").value
-                                        }, {
-                                            x: 651.28205128,
-                                            y: document.getElementById("spectraClear9").value
-                                        }, {
-                                            x: 657.69230769,
-                                            y: document.getElementById("spectraClear10").value
-                                        }, {
-                                            x: 664.1025641,
-                                            y: document.getElementById("spectraClear11").value
-                                        }, {
-                                            x: 670.51282051,
-                                            y: document.getElementById("spectraClear12").value
-                                        }, {
-                                            x: 676.92307692,
-                                            y: document.getElementById("spectraClear13").value
-                                        }, {
-                                            x: 683.33333333,
-                                            y: document.getElementById("spectraClear14").value
-                                        }, {
-                                            x: 689.74358974,
-                                            y: document.getElementById("spectraClear15").value
-                                        }, {
-                                            x: 696.15384615,
-                                            y: document.getElementById("spectraClear16").value
-                                        }, {
-                                            x: 702.56410256,
-                                            y: document.getElementById("spectraClear17").value
-                                        }, {
-                                            x: 708.97435897,
-                                            y: document.getElementById("spectraClear18").value
-                                        }, {
-                                            x: 715.38461538,
-                                            y: document.getElementById("spectraClear19").value
-                                        }, {
-                                            x: 721.79487179,
-                                            y: document.getElementById("spectraClear20").value
-                                        }, {
-                                            x: 728.20512821, 
-                                            y: document.getElementById("spectraClear21").value
-                                        }, {
-                                            x: 734.61538462,
-                                            y: document.getElementById("spectraClear22").value
-                                        }, {
-                                            x: 741.02564103,
-                                            y: document.getElementById("spectraClear23").value
-                                        }, {
-                                            x: 747.43589744,
-                                            y: document.getElementById("spectraClear24").value
-                                        }, {
-                                            x: 753.84615385,
-                                            y: document.getElementById("spectraClear25").value
-                                        }, {
-                                            x: 760.25641026,
-                                            y: document.getElementById("spectraClear26").value
-                                        }, {
-                                            x: 766.66666667,
-                                            y: document.getElementById("spectraClear27").value
-                                        }, {
-                                            x: 773.07692308,
-                                            y: document.getElementById("spectraClear28").value
-                                        }, {
-                                            x: 779.48717949,
-                                            y: document.getElementById("spectraClear29").value
-                                        }, {
-                                            x: 785.89743590,
-                                            y: document.getElementById("spectraClear30").value
-                                        }, {
-                                            x: 792.30769231,
-                                            y: document.getElementById("spectraClear31").value
-                                        }, {
-                                            x: 798.71794872,
-                                            y: document.getElementById("spectraClear32").value
-                                        }, {
-                                            x: 805.12820513,
-                                            y: document.getElementById("spectraClear33").value
-                                        }, {
-                                            x: 811.53846154,
-                                            y: document.getElementById("spectraClear34").value
-                                        }, {
-                                            x: 817.94871795,
-                                            y: document.getElementById("spectraClear35").value
-                                        }, {
-                                            x: 824.35897436,
-                                            y: document.getElementById("spectraClear36").value
-                                        }, {
-                                            x: 830.76923077,
-                                            y: document.getElementById("spectraClear37").value
-                                        }, {
-                                            x: 837.17948718,
-                                            y: document.getElementById("spectraClear38").value
-                                        }, {
-                                            x: 843.58974359,
-                                            y: document.getElementById("spectraClear39").value
-                                        }, {
-                                            x: 850.0,
-                                            y: document.getElementById("spectraClear40").value
-                                        }],
-                                    showLine: true,
-                                    pointStyle: 'line',
-                                    pointBackgroundColor: 'blue',
-                                    borderColor: 'blue',
-                                    fill: false
-                                },
-                                {
-                                    label: 'Cloudy target atmosphere',
-                                    data: [{
-                                            x: 600,
-                                            y: document.getElementById("spectraCloudy1").value
-                                        }, {
-                                            x: 606.41025641,
-                                            y: document.getElementById("spectraCloudy2").value
-                                        }, {
-                                            x: 612.82051282,
-                                            y: document.getElementById("spectraCloudy3").value
-                                        }, {
-                                            x: 619.23076923,
-                                            y: document.getElementById("spectraCloudy4").value
-                                        }, {
-                                            x: 625.64102564,
-                                            y: document.getElementById("spectraCloudy5").value
-                                        }, {
-                                            x: 632.05128205,
-                                            y: document.getElementById("spectraCloudy6").value
-                                        }, {
-                                            x: 638.46153846,
-                                            y: document.getElementById("spectraCloudy7").value
-                                        }, {
-                                            x: 644.87179487,
-                                            y: document.getElementById("spectraCloudy8").value
-                                        }, {
-                                            x: 651.28205128,
-                                            y: document.getElementById("spectraCloudy9").value
-                                        }, {
-                                            x: 657.69230769,
-                                            y: document.getElementById("spectraCloudy10").value
-                                        }, {
-                                            x: 664.1025641,
-                                            y: document.getElementById("spectraCloudy11").value
-                                        }, {
-                                            x: 670.51282051,
-                                            y: document.getElementById("spectraCloudy12").value
-                                        }, {
-                                            x: 676.92307692,
-                                            y: document.getElementById("spectraCloudy13").value
-                                        }, {
-                                            x: 683.33333333,
-                                            y: document.getElementById("spectraCloudy14").value
-                                        }, {
-                                            x: 689.74358974,
-                                            y: document.getElementById("spectraCloudy15").value
-                                        }, {
-                                            x: 696.15384615,
-                                            y: document.getElementById("spectraCloudy16").value
-                                        }, {
-                                            x: 702.56410256,
-                                            y: document.getElementById("spectraCloudy17").value
-                                        }, {
-                                            x: 708.97435897,
-                                            y: document.getElementById("spectraCloudy18").value
-                                        }, {
-                                            x: 715.38461538,
-                                            y: document.getElementById("spectraCloudy19").value
-                                        }, {
-                                            x: 721.79487179,
-                                            y: document.getElementById("spectraCloudy20").value
-                                        }, {
-                                            x: 728.20512821, 
-                                            y: document.getElementById("spectraCloudy21").value
-                                        }, {
-                                            x: 734.61538462,
-                                            y: document.getElementById("spectraCloudy22").value
-                                        }, {
-                                            x: 741.02564103,
-                                            y: document.getElementById("spectraCloudy23").value
-                                        }, {
-                                            x: 747.43589744,
-                                            y: document.getElementById("spectraCloudy24").value
-                                        }, {
-                                            x: 753.84615385,
-                                            y: document.getElementById("spectraCloudy25").value
-                                        }, {
-                                            x: 760.25641026,
-                                            y: document.getElementById("spectraCloudy26").value
-                                        }, {
-                                            x: 766.66666667,
-                                            y: document.getElementById("spectraCloudy27").value
-                                        }, {
-                                            x: 773.07692308,
-                                            y: document.getElementById("spectraCloudy28").value
-                                        }, {
-                                            x: 779.48717949,
-                                            y: document.getElementById("spectraCloudy29").value
-                                        }, {
-                                            x: 785.89743590,
-                                            y: document.getElementById("spectraCloudy30").value
-                                        }, {
-                                            x: 792.30769231,
-                                            y: document.getElementById("spectraCloudy31").value
-                                        }, {
-                                            x: 798.71794872,
-                                            y: document.getElementById("spectraCloudy32").value
-                                        }, {
-                                            x: 805.12820513,
-                                            y: document.getElementById("spectraCloudy33").value
-                                        }, {
-                                            x: 811.53846154,
-                                            y: document.getElementById("spectraCloudy34").value
-                                        }, {
-                                            x: 817.94871795,
-                                            y: document.getElementById("spectraCloudy35").value
-                                        }, {
-                                            x: 824.35897436,
-                                            y: document.getElementById("spectraCloudy36").value
-                                        }, {
-                                            x: 830.76923077,
-                                            y: document.getElementById("spectraCloudy37").value
-                                        }, {
-                                            x: 837.17948718,
-                                            y: document.getElementById("spectraCloudy38").value
-                                        }, {
-                                            x: 843.58974359,
-                                            y: document.getElementById("spectraCloudy39").value
-                                        }, {
-                                            x: 850.0,
-                                            y: document.getElementById("spectraCloudy40").value
-                                        }],
-                                    showLine: true,
-                                    pointStyle: 'line',
-                                    pointBackgroundColor: 'gray',
-                                    borderColor: 'gray',
-                                    fill: false
-                                }]
-                            },
-                            options: {
-                                title: {
-                                    display: true,
-                                    text: 'Target Spectrum (R band)',
-                                    fontSize: 20
-                                },
-                                responsive: false,
-                                scales: {
-                                    xAxes: [{
-                                        scaleLabel: {
-                                            display: true,
-                                            labelString: 'Wavelength (nm)'
-                                        },
-                                        type: 'linear',
-                                        position: 'bottom'
-                                    }],
-        
-                                    yAxes: [{
-                                        scaleLabel: {
-                                            display: true,
-                                            labelString: 'Flux (counts) * 1e22'
-                                        },
-                                        type: 'linear',
-                                        position: 'left'
-                                    }]
-                                }
-                            }
-                        });
-                        scatterChart.clear();
-                    };   
-                </script>
-                </fieldset>
+            </fieldset>
 
                 <fieldset style="width:550px;height:430px">
                     <canvas id="contrastChart" width="500" height="400"></canvas>
-                    <script>
-                        function plot_contrast() {
-                            var target_name = document.getElementById('Target');
-                            var target_text = target_name.options[target_name.selectedIndex].value;
-            
-                            var ctx = document.getElementById('contrastChart').getContext('2d');
-                            var scatterChart = new Chart(ctx, {
-                                type: 'scatter',
-                                data: {
-                                    datasets: [{
-                                        label: target_text,
-                                        data: [{
-                                                x: 1,
-                                                y: document.getElementById("contrast1").value
-                                            }, {
-                                                x: 2,
-                                                y: document.getElementById("contrast2").value
-                                            }, {
-                                                x: 3,
-                                                y: document.getElementById("contrast3").value
-                                            }, {
-                                                x: 4,
-                                                y: document.getElementById("contrast4").value
-                                            }, {
-                                                x: 5,
-                                                y: document.getElementById("contrast5").value
-                                            }, {
-                                                x: 6,
-                                                y: document.getElementById("contrast6").value
-                                            }, {
-                                                x: 7,
-                                                y: document.getElementById("contrast7").value
-                                            }, {
-                                                x: 8,
-                                                y: document.getElementById("contrast8").value
-                                            }, {
-                                                x: 9,
-                                                y: document.getElementById("contrast9").value
-                                            }, {
-                                                x: 10,
-                                                y: document.getElementById("contrast10").value
-                                            }, {
-                                                x: 11,
-                                                y: document.getElementById("contrast11").value
-                                            }, {
-                                                x: 12,
-                                                y: document.getElementById("contrast12").value
-                                            }, {
-                                                x: 13,
-                                                y: document.getElementById("contrast13").value
-                                            }, {
-                                                x: 14,
-                                                y: document.getElementById("contrast14").value
-                                            }, {
-                                                x: 15,
-                                                y: document.getElementById("contrast15").value
-                                            }, {
-                                                x: 16,
-                                                y: document.getElementById("contrast16").value
-                                            }, {
-                                                x: 17,
-                                                y: document.getElementById("contrast17").value
-                                            }, {
-                                                x: 18,
-                                                y: document.getElementById("contrast18").value
-                                            }, {
-                                                x: 19,
-                                                y: document.getElementById("contrast19").value
-                                            }, {
-                                                x: 20,
-                                                y: document.getElementById("contrast20").value
-                                            }],
-                                        showLine: true,
-                                        pointStyle: 'line',
-                                        pointBackgroundColor: 'orange',
-                                        borderColor: 'orange',
-                                        fill: false
-                                    }]
-                                },
-                                options: {
-                                    title: {
-                                        display: true,
-                                        text: 'Speckle noise vs. angular separation',
-                                        fontSize: 20
-                                    },
-                                    responsive: false,
-                                    scales: {
-                                        xAxes: [{
-                                            scaleLabel: {
-                                                display: true,
-                                                labelString: 'Angular separation (λ/D)'
-                                            },
-                                            type: 'linear',
-                                            position: 'bottom'
-                                        }],
-            
-                                        yAxes: [{
-                                            scaleLabel: {
-                                                display: true,
-                                                labelString: 'Speckle noise (counts)'
-                                            },
-                                            type: 'linear',
-                                            position: 'left'
-                                        }]
-                                    }
-                                }
-                            });
-                            scatterChart.clear();
-                        };   
-                    </script>
-                    </fieldset>
+                </fieldset>
         </div>
-    </form>
   </body>
 </html>

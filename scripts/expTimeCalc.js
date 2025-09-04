@@ -3,17 +3,20 @@
 // for proper scaling of this photon noise as a function of filter. This is the value that we then scale by the 20% of the strehl ratio. This photon noise is 
 // just another noise contribution term to the SNR measurement, so we don't need to have a separate plot for it. We'll forget about contrast for now. 
 
+/////////////////////////////////////////////
 // This is the code to preload the images
+/////////////////////////////////////////////
 var imageList = Array();
-for (var i = 1; i <= 3; i++) {
+for (let i = 0; i < 3; i++) {
     imageList[i] = new Image(200, 200);
-    imageList[i].src = "/home/mmnguyen/Research/ExpTimeCalc/etc_pic" + i + ".png";
+    imageList[i].src = `etc_pic${i+1}.png`;
 }
 
 
 function switchImage() {
-    var selectedImage = document.myForm.instrument.options[document.myForm.instrument.selectedIndex].value;
-    document.myImage.src = imageList[selectedImage].src;
+  const sel = document.getElementById('instrument');
+  const idx = Number(sel.value);       // 0,1,2 as in your HTML
+  document.getElementById('myImage').src = imageList[idx].src;
 }
 
 
@@ -37,115 +40,116 @@ function changeButton() {
 }
 
 
-var spectraClear;
-var spectraCloudy; 
 
-document.getElementById('spectraClear').addEventListener('change', function selectedFileChanged() {
-    if (this.files.length === 0) {
-        console.log('No file selected.');
-        return;
-    }
+//////////////////////////////////////////////////////////////////////
+// Helper functions to get and set arrays of elements with ids like 
+// `${prefix}1`, `${prefix}2`, ..., `${prefix}{count}`
+//////////////////////////////////////////////////////////////////////
+function getElems(prefix, count) {
+  return Array.from({ length: count }, (_, i) =>
+    document.getElementById(`${prefix}${i + 1}`)
+  );
+}
 
+// Helper: set values from an array into a list of inputs
+function setValues(elems, values) {
+  elems.forEach((el, i) => {
+    if (el && values[i] != null) el.value = values[i];
+  });
+}
+
+/////////////////////////////////////////////////////////////////////
+// Target dictionary with photometric values for a range of filters
+/////////////////////////////////////////////////////////////////////
+const targets = {
+  "HR 8799 b":  { J:16.52, H:15.08, K:14.05, "Lp":12.68, "Ms":13.07 },
+  "HR 8799 c":  { J:14.65, H:14.18, K:13.13, "Lp":11.83, "Ms":12.05 },
+  "HR 8799 d":  { J:15.26, H:14.23, K:13.11, "Lp":11.50, "Ms":11.67 },
+  "HR 8799 e":  { H:13.88, K:12.89, "Lp":11.61, "Ms":10.09 },
+  "kappa And b":  {J:12.7, H:11.7, K:11.0, "Lp":9.54},
+  "1RXJ 1609 B":  {J:12.09, H:11.06, K:10.38, "Lp":8.99},
+  "GSC 06214 B":  {J:10.43, H:9.74, K:9.14, "Lp":7.94, "Ms":7.94},
+  "USco CTIO108 B":  {J:10.72, H:9.94, K:9.30},
+  "HIP 78530 B":  {J:9.25, H:8.58, K:8.36, "Lp":7.99},
+  "2M 1207 B":  {J:16.40, H:14.49, K:13.31, "Lp":11.68},
+  "2M 1207 A":  {J:9.35, H:8.74, K:8.30, "Lp":7.73},
+  "TWA 5 B":  {J:9.1, H:8.65, K:7.91},
+  "HR 7329 B":  {J:8.64, H:8.33, K:8.18, "Lp":7.69},
+  "PZ Tel B":  {J:8.70, H:8.31, K:7.86},
+  "2M0103AB B":  {J:12.1, H:10.9, K:10.3, "Lp":9.3},
+  "AB Pic B":  {J:12.80, H:11.31, K:10.76, "Lp":9.9},
+  "Luhman 16 B":  {J:14.69, H:13.86, K:13.20},
+  "Luhman 16 A":  {J:15.00, H:13.84, K:12.91},
+  "CD-35 2722 B":  {J:11.99, H:11.14, K:10.37}
+};
+
+$("#Target").change(function () {
+  const t = $(this).val();
+  const bandMap = targets[t] || {};
+  const html = Object.entries(bandMap)
+    .map(([name, val]) => `<option name='${name}' value=${val}> ${name} </option>`)
+    .join("");
+  $("#targetFilter").html(html);
+});
+
+
+///////////////////////////////////////////////////////////////////
+// Global variables and Helper functions for the main calculation
+///////////////////////////////////////////////////////////////////
+
+// Global app state
+const G = {
+  totalInt: 0,
+  ExpTimeList: [],
+  snrList: [],         // length 9 (index 0..8) from your loop
+  polFracList: [],     // length 9 (index 0..8) from your loop
+  minExpValues: [],    // length 8
+  spectraClear: [],    // up to 40 lines (numbers)
+  spectraCloudy: [],   // up to 40 lines (numbers)
+  contrastList: []     // length 20
+};
+
+// Keep chart instances to destroy/recreate cleanly
+let snrChartInst, snrPolChartInst, spectraClearChartInst, contrastChartInst;
+
+// label helper
+function getTargetLabel(){
+  const sel = document.getElementById('Target');
+  return sel ? sel.value : '';
+}
+
+
+// Sets values from elements list
+function setValuesFrom(list, startIndex, elems) {
+  const take = Math.min(elems.length, Math.max(0, list.length - startIndex));
+  setValues(elems, list.slice(startIndex, startIndex + take));
+}
+
+// Read in the spectra files
+let spectraClear = [];
+let spectraCloudy = [];
+
+function attachSpectrumReader(inputId, setter) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.addEventListener('change', function () {
+    if (this.files.length === 0) return;
     const reader = new FileReader();
-    reader.onload = function fileReadCompleted() {
-        // when the reader is done, the content is in reader.result.
-        spectraClear = reader.result.split(/\r?\n/);
-        console.log(reader.result);
+    reader.onload = () => {
+      const arr = reader.result.split(/\r?\n/).map(Number).filter(v => !Number.isNaN(v));
+      setter(arr);
     };
     reader.readAsText(this.files[0]);
-});
+  });
+}
 
-document.getElementById('spectraCloudy').addEventListener('change', function selectedFileChanged() {
-    if (this.files.length === 0) {
-        console.log('No file selected.');
-        return;
-    }
+attachSpectrumReader('spectraClear',  arr => { G.spectraClear  = arr.slice(0, 40); });
+attachSpectrumReader('spectraCloudy', arr => { G.spectraCloudy = arr.slice(0, 40); });
 
-    const reader = new FileReader();
-    reader.onload = function fileReadCompleted() {
-        // when the reader is done, the content is in reader.result.
-        spectraCloudy = reader.result.split(/\r?\n/);
-        console.log(reader.result);
-    };
-    reader.readAsText(this.files[0]);
-});
-
-
-
-$(document).ready(function() {
-        
-    $("#Target").change(function() {
-        var val = $(this).val();
-        if (val == "HR 8799 b") {
-            $("#targetFilter").html("<option name='J' value=16.52> J </option><option name='H' value=15.08> H </option><option name='K' value=14.05> K </option><option name='Lp' value=12.68> L' </option><option name='Ms' value=13.07> M' </option>");
-        } else if (val == "HR 8799 c") {
-            $("#targetFilter").html("<option name='J' value=14.65> J </option><option name='H' value=14.18> H </option><option name='K' value=13.13> K </option><option name='Lp' value=11.83> L' </option><option name='Ms' value=12.05> M' </option>");
-
-        } else if (val == "HR 8799 d") {
-            $("#targetFilter").html("<option name='J' value=15.26> J </option><option name='H' value=14.23> H </option><option name='K' value=13.11> K </option><option name='Lp' value=11.50> L' </option><option name='Ms' value=11.67> M' </option>");
-
-        } else if (val == "HR 8799 e") {
-            $("#targetFilter").html("<option name='H' value=13.88> H </option><option name='K' value=12.89> K </option><option name='Lp' value=11.61> L' </option><option name='Ms' value=10.09> M' </option>");
-
-        } else if (val == "kappa And b") {
-            $("#targetFilter").html("<option name='J' value=12.7> J </option><option name='H' value=11.7> H </option><option name='K' value=11.0> K </option><option name='Lp' value=9.54> L' </option>");
-        
-        } else if (val == "1RXJ 1609 B") {
-            $("#targetFilter").html("<option name='J' value=12.09> J </option><option name='H' value=11.06> H </option><option name='K' value=10.38> K </option><option name='Lp' value=8.99> L' </option>");
-
-        } else if (val == "GSC 06214 B") {
-            $("#targetFilter").html("<option name='J' value=10.43> J </option><option name='H' value=9.74> H </option><option name='K' value=9.14> K </option><option name='Lp' value=7.94> L' </option><option name='Ms' value=7.94> M' </option>");
-
-        } else if (val == "USco CTIO108 B") {
-            $("#targetFilter").html("<option name='J' value=10.72> J </option><option name='H' value=9.94> H </option><option name='K' value=9.30> K </option>");
-
-        } else if (val == "HIP 78530 B") {
-            $("#targetFilter").html("<option name='J' value=9.25> J </option><option name='H' value=8.58> H </option><option name='K' value=8.36> K </option><option name='Lp' value=7.99> L' </option>");
-
-        } else if (val == "2M 1207 B") {
-            $("#targetFilter").html("<option name='J' value=16.40> J </option><option name='H' value=14.49> H </option><option name='K' value=13.31> K </option><option name='Lp' value=11.68> L' </option>");
-
-        } else if (val == "2M 1207 A") {
-            $("#targetFilter").html("<option name='J' value=9.35> J </option><option name='H' value=8.74> H </option><option name='K' value=8.30> K </option><option name='Lp' value=7.73> L' </option>");
-
-        } else if (val == "TWA 5 B") {
-            $("#targetFilter").html("<option name='J' value=9.1> J </option><option name='H' value=8.65> H </option><option name='K' value=7.91> K </option>");
-
-        } else if (val == "HR 7329 B") {
-            $("#targetFilter").html("<option name='J' value=8.64> J </option><option name='H' value=8.33> H </option><option name='K' value=8.18> K </option><option name='Lp' value=7.69> L' </option>");
-
-        } else if (val == "PZ Tel B") {
-            $("#targetFilter").html("<option name='J' value=8.70> J </option><option name='H' value=8.31> H </option><option name='K' value=7.86> K </option>");
-
-        } else if (val == "2M0103AB B") {
-            $("#targetFilter").html("<option name='J' value=12.1> J </option><option name='H' value=10.9> H </option><option name='K' value=10.3> K </option><option name='Lp' value=9.3> L' </option>");
-
-        } else if (val == "AB Pic B") {
-            $("#targetFilter").html("<option name='J' value=12.80> J </option><option name='H' value=11.31> H </option><option name='K' value=10.76> K </option><option name='Lp' value=9.9> L' </option>");
-
-        } else if (val == "Luhman 16 B") {
-            $("#targetFilter").html("<option name='J' value=14.69> J </option><option name='H' value=13.86> H </option><option name='K' value=13.20> K </option>");
-
-        } else if (val == "Luhman 16 A") {
-            $("#targetFilter").html("<option name='J' value=15.00> J </option><option name='H' value=13.84> H </option><option name='K' value=12.91> K </option>");
-
-        } else if (val == "CD-35 2722 B") {
-            $("#targetFilter").html("<option name='J' value=11.99> J </option><option name='H' value=11.14> H </option><option name='K' value=10.37> K </option>");
-
-        }
-    });
-
-});
-
-
-//////////////////////////////////////////////////////
-//////////////////////////////////////////////////////
-//////////////////////////////////////////////////////
-
+// Define Moffat distribution
 var beta = 4.765;
 var FWHM = 2.9207*beta;
 var alpha = FWHM/(2*Math.sqrt(2**(1/beta) - 1));
-
 
 function moffat(I_0, r, alpha, beta) {
     var Intensity = I_0 * (1 + (r / alpha)**2)**(-1 * beta);
@@ -154,6 +158,7 @@ function moffat(I_0, r, alpha, beta) {
 }
 
 
+// Calculation functions
 function convert_mag_to_counts(mag, zp) {
     // """
     // mag: magnitude 
@@ -220,22 +225,152 @@ function calculate_SNR(N_obj, npix, sky_bkg, nreads, exp_time, readout_noise, da
     return snr_output;
 }
 
+
+//////////////////////////////////////////////////////
+// Plot functions that read from G, not the DOM
+//////////////////////////////////////////////////////
+
+function plot_snr_from_state() {
+  const totalInt = Number(G.totalInt) || 0;
+  // You previously used snr indices 1..8 at x = 1/4..2 * totalInt
+  const points = [
+    { x: 0, y: 0 },
+    ...G.snrList.slice(1, 9).map((y, i) => ({
+      x: totalInt * ((i + 1) / 4),
+      y: Number(y) || 0
+    }))
+  ];
+
+  const ctx = document.getElementById('snrChart').getContext('2d');
+  if (snrChartInst) snrChartInst.destroy();
+  snrChartInst = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: getTargetLabel(),
+        data: points,
+        showLine: true,
+        pointStyle: 'line',
+        borderColor: 'black',
+        pointBackgroundColor: 'black',
+        fill: false
+      }]
+    },
+    options: {
+      title: { display: true, text: 'SNR v. Exposure Time (s)', fontSize: 20 },
+      responsive: false,
+      scales: {
+        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Exposure Time (s)' } }],
+        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'SNR' } }]
+      }
+    }
+  });
+}
+
+function plot_pol_snr_from_state() {
+  const data = G.minExpValues.map((t, i) => ({
+    x: Number(t) / 3600,                   // sec → hr
+    y: Number(G.polFracList[i + 1]) * 100  // you used indices 1..8 for polFrac
+  }));
+
+  const ctx = document.getElementById('snrPolChart').getContext('2d');
+  if (snrPolChartInst) snrPolChartInst.destroy();
+  snrPolChartInst = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: getTargetLabel(),
+        data,
+        showLine: true,
+        borderColor: 'red',
+        pointBackgroundColor: 'red',
+        fill: false
+      }]
+    },
+    options: {
+      title: { display: true, text: 'Polarization Fraction (%) vs. Minimum Detection Exposure Time (hr)', fontSize: 20 },
+      responsive: false,
+      scales: {
+        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Minimum Detection Threshold Exposure Time (hr)' } }],
+        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Polarization Fraction (%)' } }]
+      }
+    }
+  });
+}
+
+function plot_spectra_from_state() {
+  // Build wavelengths 600 → 850 nm (40 points)
+  const xs = Array.from({ length: 40 }, (_, i) => 600 + (250 * i) / 39);
+  const clearData  = xs.map((x, i) => ({ x, y: Number(G.spectraClear[i])  || 0 }));
+  const cloudyData = xs.map((x, i) => ({ x, y: Number(G.spectraCloudy[i]) || 0 }));
+
+  const ctx = document.getElementById('spectraClearChart').getContext('2d');
+  if (spectraClearChartInst) spectraClearChartInst.destroy();
+  spectraClearChartInst = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Clear target atmosphere',  data: clearData,  showLine: true, pointStyle: 'line', borderColor: 'blue',  pointBackgroundColor: 'blue',  fill: false },
+        { label: 'Cloudy target atmosphere', data: cloudyData, showLine: true, pointStyle: 'line', borderColor: 'gray',  pointBackgroundColor: 'gray',  fill: false }
+      ]
+    },
+    options: {
+      title: { display: true, text: 'Target Spectrum (R band)', fontSize: 20 },
+      responsive: false,
+      scales: {
+        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Wavelength (nm)' } }],
+        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Flux (counts) * 1e22' } }]
+      }
+    }
+  });
+}
+
+function plot_contrast_from_state() {
+  const data = G.contrastList.map((y, i) => ({ x: i + 1, y: Number(y) || 0 }));
+
+  const ctx = document.getElementById('contrastChart').getContext('2d');
+  if (contrastChartInst) contrastChartInst.destroy();
+  contrastChartInst = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: getTargetLabel(),
+        data,
+        showLine: true,
+        pointStyle: 'line',
+        borderColor: 'orange',
+        pointBackgroundColor: 'orange',
+        fill: false
+      }]
+    },
+    options: {
+      title: { display: true, text: 'Speckle noise vs. angular separation', fontSize: 20 },
+      responsive: false,
+      scales: {
+        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Angular separation (λ/D)' } }],
+        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Speckle noise (counts)' } }]
+      }
+    }
+  });
+}
+
+
 //////////////////////////////////////////////////////
 ////////////  Official NIRC2 functions  //////////////
 //////////////////////////////////////////////////////
 
 function tmin(x, y, samp_mode, n_reads)
 {
-	samp_rate = 200;
-	overhead = 6.001;
+	const samp_rate = 200;
+	const overhead = 6.001;
 	y = y + 8;
-	ticks = 5000000/(samp_rate*1000);
-	n_pause = ticks - 8;
-	start_time = 240 * (1324 - y);
-	rows_time = 25 * y * (n_pause * (8 + x / 4) + (864 + 1.25 * x));
+	const ticks = 5000000/(samp_rate*1000);
+	const n_pause = ticks - 8;
+	const start_time = 240 * (1324 - y);
+	const rows_time = 25 * y * (n_pause * (8 + x / 4) + (864 + 1.25 * x));
 	// Add overhead, scale from nanoseconds
-	min_time = start_time + rows_time;
-	min_time = (1+overhead/100)*min_time/1000000000;
+	let min_time = start_time + rows_time;
+	min_time = (1 + overhead / 100) * min_time / 1000000000;
 	if (samp_mode == 3) min_time = min_time * n_reads;
 	// Trap for values less than 2.5 millisec
 	if (min_time < 0.0025) min_time = 0.0025;
@@ -352,10 +487,13 @@ function nirc2_s2n(mag, filter, camera, n_exp, tint, strehl, n_reads)
     return [snr, signal, ap, totn, bgf];
 
 }
-//////////////////////////////////////////////////////
-//////////////////////////////////////////////////////
-//////////////////////////////////////////////////////
 
+
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+// Main function to do calculation
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
 
 function doCalc() {
 
@@ -494,138 +632,19 @@ function doCalc() {
     var noise_div = document.getElementById("noise_div");
     var sky_bkg_div = document.getElementById("sky_bkg_div");
 
-    var snr1 = document.getElementById("snr1");
-    var snr2 = document.getElementById("snr2");
-    var snr3 = document.getElementById("snr3");
-    var snr4 = document.getElementById("snr4");
-    var snr5 = document.getElementById("snr5");
-    var snr6 = document.getElementById("snr6");
-    var snr7 = document.getElementById("snr7");
-    var snr8 = document.getElementById("snr8");
+    var Eff_div = document.getElementById("Eff_div");
+    var tel_overhead_div = document.getElementById("tel_overhead_div");
+    var nirc2_overhead_div = document.getElementById("nirc2_overhead_div");
+    var total_int_div = document.getElementById("total_int_div");
+    var total_elapsed_div = document.getElementById("total_elapsed_div");
 
-    var polFrac1 = document.getElementById("polFrac1");
-    var polFrac2 = document.getElementById("polFrac2");
-    var polFrac3 = document.getElementById("polFrac3");
-    var polFrac4 = document.getElementById("polFrac4");
-    var polFrac5 = document.getElementById("polFrac5");
-    var polFrac6 = document.getElementById("polFrac6");
-    var polFrac7 = document.getElementById("polFrac7");
-    var polFrac8 = document.getElementById("polFrac8");
-
-    var minExpTime1 = document.getElementById("minExpTime1");
-    var minExpTime2 = document.getElementById("minExpTime2");
-    var minExpTime3 = document.getElementById("minExpTime3");
-    var minExpTime4 = document.getElementById("minExpTime4");
-    var minExpTime5 = document.getElementById("minExpTime5");
-    var minExpTime6 = document.getElementById("minExpTime6");
-    var minExpTime7 = document.getElementById("minExpTime7");
-    var minExpTime8 = document.getElementById("minExpTime8");
-
-    var totalInt = document.getElementById("totalInt");
-
-    var spectraClear1 = document.getElementById("spectraClear1");
-    var spectraClear2 = document.getElementById("spectraClear2");
-    var spectraClear3 = document.getElementById("spectraClear3");
-    var spectraClear4 = document.getElementById("spectraClear4");
-    var spectraClear5 = document.getElementById("spectraClear5");
-    var spectraClear6 = document.getElementById("spectraClear6");
-    var spectraClear7 = document.getElementById("spectraClear7");
-    var spectraClear8 = document.getElementById("spectraClear8");
-    var spectraClear9 = document.getElementById("spectraClear9");
-    var spectraClear10 = document.getElementById("spectraClear10");
-    var spectraClear11 = document.getElementById("spectraClear11");
-    var spectraClear12 = document.getElementById("spectraClear12");
-    var spectraClear13 = document.getElementById("spectraClear13");
-    var spectraClear14 = document.getElementById("spectraClear14");
-    var spectraClear15 = document.getElementById("spectraClear15");
-    var spectraClear16 = document.getElementById("spectraClear16");
-    var spectraClear17 = document.getElementById("spectraClear17");
-    var spectraClear18 = document.getElementById("spectraClear18");
-    var spectraClear19 = document.getElementById("spectraClear19");
-    var spectraClear20 = document.getElementById("spectraClear20");
-    var spectraClear21 = document.getElementById("spectraClear21");
-    var spectraClear22 = document.getElementById("spectraClear22");
-    var spectraClear23 = document.getElementById("spectraClear23");
-    var spectraClear24 = document.getElementById("spectraClear24");
-    var spectraClear25 = document.getElementById("spectraClear25");
-    var spectraClear26 = document.getElementById("spectraClear26");
-    var spectraClear27 = document.getElementById("spectraClear27");
-    var spectraClear28 = document.getElementById("spectraClear28");
-    var spectraClear29 = document.getElementById("spectraClear29");
-    var spectraClear30 = document.getElementById("spectraClear30");
-    var spectraClear31 = document.getElementById("spectraClear31");
-    var spectraClear32 = document.getElementById("spectraClear32");
-    var spectraClear33 = document.getElementById("spectraClear33");
-    var spectraClear34 = document.getElementById("spectraClear34");
-    var spectraClear35 = document.getElementById("spectraClear35");
-    var spectraClear36 = document.getElementById("spectraClear36");
-    var spectraClear37 = document.getElementById("spectraClear37");
-    var spectraClear38 = document.getElementById("spectraClear38");
-    var spectraClear39 = document.getElementById("spectraClear39");
-    var spectraClear40 = document.getElementById("spectraClear40");
-
-    var spectraCloudy1 = document.getElementById("spectraCloudy1");
-    var spectraCloudy2 = document.getElementById("spectraCloudy2");
-    var spectraCloudy3 = document.getElementById("spectraCloudy3");
-    var spectraCloudy4 = document.getElementById("spectraCloudy4");
-    var spectraCloudy5 = document.getElementById("spectraCloudy5");
-    var spectraCloudy6 = document.getElementById("spectraCloudy6");
-    var spectraCloudy7 = document.getElementById("spectraCloudy7");
-    var spectraCloudy8 = document.getElementById("spectraCloudy8");
-    var spectraCloudy9 = document.getElementById("spectraCloudy9");
-    var spectraCloudy10 = document.getElementById("spectraCloudy10");
-    var spectraCloudy11 = document.getElementById("spectraCloudy11");
-    var spectraCloudy12 = document.getElementById("spectraCloudy12");
-    var spectraCloudy13 = document.getElementById("spectraCloudy13");
-    var spectraCloudy14 = document.getElementById("spectraCloudy14");
-    var spectraCloudy15 = document.getElementById("spectraCloudy15");
-    var spectraCloudy16 = document.getElementById("spectraCloudy16");
-    var spectraCloudy17 = document.getElementById("spectraCloudy17");
-    var spectraCloudy18 = document.getElementById("spectraCloudy18");
-    var spectraCloudy19 = document.getElementById("spectraCloudy19");
-    var spectraCloudy20 = document.getElementById("spectraCloudy20");
-    var spectraCloudy21 = document.getElementById("spectraCloudy21");
-    var spectraCloudy22 = document.getElementById("spectraCloudy22");
-    var spectraCloudy23 = document.getElementById("spectraCloudy23");
-    var spectraCloudy24 = document.getElementById("spectraCloudy24");
-    var spectraCloudy25 = document.getElementById("spectraCloudy25");
-    var spectraCloudy26 = document.getElementById("spectraCloudy26");
-    var spectraCloudy27 = document.getElementById("spectraCloudy27");
-    var spectraCloudy28 = document.getElementById("spectraCloudy28");
-    var spectraCloudy29 = document.getElementById("spectraCloudy29");
-    var spectraCloudy30 = document.getElementById("spectraCloudy30");
-    var spectraCloudy31 = document.getElementById("spectraCloudy31");
-    var spectraCloudy32 = document.getElementById("spectraCloudy32");
-    var spectraCloudy33 = document.getElementById("spectraCloudy33");
-    var spectraCloudy34 = document.getElementById("spectraCloudy34");
-    var spectraCloudy35 = document.getElementById("spectraCloudy35");
-    var spectraCloudy36 = document.getElementById("spectraCloudy36");
-    var spectraCloudy37 = document.getElementById("spectraCloudy37");
-    var spectraCloudy38 = document.getElementById("spectraCloudy38");
-    var spectraCloudy39 = document.getElementById("spectraCloudy39");
-    var spectraCloudy40 = document.getElementById("spectraCloudy40");
-
-    var contrast1 = document.getElementById("contrast1");
-    var contrast2 = document.getElementById("contrast2");
-    var contrast3 = document.getElementById("contrast3");
-    var contrast4 = document.getElementById("contrast4");
-    var contrast5 = document.getElementById("contrast5");
-    var contrast6 = document.getElementById("contrast6");
-    var contrast7 = document.getElementById("contrast7");
-    var contrast8 = document.getElementById("contrast8");
-    var contrast9 = document.getElementById("contrast9");
-    var contrast10 = document.getElementById("contrast10");
-    var contrast11 = document.getElementById("contrast11");
-    var contrast12 = document.getElementById("contrast12");
-    var contrast13 = document.getElementById("contrast13");
-    var contrast14 = document.getElementById("contrast14");
-    var contrast15 = document.getElementById("contrast15");
-    var contrast16 = document.getElementById("contrast16");
-    var contrast17 = document.getElementById("contrast17");
-    var contrast18 = document.getElementById("contrast18");
-    var contrast19 = document.getElementById("contrast19");
-    var contrast20 = document.getElementById("contrast20");
-
+    // Plot elements
+    const spectraClearEls  = getElems('spectraClear', 40);
+    const spectraCloudyEls = getElems('spectraCloudy', 40);
+    const contrastEls      = getElems('contrast', 20);
+    const snrEls           = getElems('snr', 8);
+    const polFracEls       = getElems('polFrac', 8);
+    const minExpTimeEls    = getElems('minExpTime', 8);
 
     // Calculate SNR and efficiency. These functions output arrays containing the different output elements. (ie the variables SNR and Eff should be arrays)
     var SNR = nirc2_s2n(Mag, filter_text, camera_text, n_exp, ExpTime, strehl, nreads);
@@ -648,157 +667,53 @@ function doCalc() {
         ExpTimeList.push(totalIntTime*i/4);
         polFracList.push(polFrac*(i+1)/4);
     }
-    
+
+    // set the values from the SNR and polarization fraction lists
+    setValuesFrom(snrList,      1, snrEls);
+    setValuesFrom(polFracList,  1, polFracEls);
+
+    // Min exposure times: compute in a loop instead of 8 separate lines
+    const minExpValues = polFracList.slice(0, 8).map((pf) => {
+        const A = -Math.pow(minDetection / pf, 2) * signalPerUnitTime;
+        const B = Math.pow(minDetection / pf, 2) - 4 * (-1 * signalPerUnitTime ** 2) * (minDetection * noisePerUnitTime / pf);
+        const denom = 2 * (-1 * signalPerUnitTime ** 2);
+        return (A + Math.sqrt(B)) / denom; // your quadratic solution
+    });
+    setValues(minExpTimeEls, minExpValues);
+
+    // Fill spectra inputs
+    setValues(spectraClearEls,  spectraClear.slice(0, spectraClearEls.length));
+    setValues(spectraCloudyEls, spectraCloudy.slice(0, spectraCloudyEls.length));
+
+    // Save to state instead of writing to DOM inputs
+    G.totalInt      = Eff[3];
+    G.ExpTimeList   = ExpTimeList;
+    G.snrList       = snrList.slice();           // 0..8
+    G.polFracList   = polFracList.slice();       // 0..8
+    G.minExpValues  = minExpValues.slice(0, 8);  // ensure 8
+    G.contrastList  = Array.from({length: 20}, (_, i) =>
+    Math.sqrt(moffat(SNR[1], i + 1, alpha, beta))
+    );
+
+    // If files were selected, readers already populated G.spectraClear/Cloudy
 
     // Update the div variables to display in html 
-	snr_div.innerHTML = "<h2>SNR = " + SNR[0].toFixed(1).toString() + "</h2>";
-	N_obj_div.innerHTML = "Total signal = " + SNR[1].toFixed(1).toString() + " DN";
-	npix_div.innerHTML = "Aperture area = " + SNR[2].toFixed(1).toString() + " pix";
-	noise_div.innerHTML = "Total noise = " + SNR[3].toFixed(1).toString() + " DN";
-	sky_bkg_div.innerHTML = "Background per frame = " + SNR[4].toFixed(1).toString() + " DN";
+    SNR_div.innerHTML            = `<h2>SNR = ${SNR[0].toFixed(1)}</h2>`;
+    N_obj_div.innerHTML          = `Total signal = ${SNR[1].toFixed(1)} DN`;
+    npix_div.innerHTML           = `Aperture area = ${SNR[2].toFixed(1)} pix`;
+    noise_div.innerHTML          = `Total noise = ${SNR[3].toFixed(1)} DN`;
+    sky_bkg_div.innerHTML        = `Background per frame = ${SNR[4].toFixed(1)} DN`;
 
-    Eff_div.innerHTML = "<h2>Efficiency = " + Eff[0].toFixed(1).toString() + "</h2>";
-    tel_overhead_div.innerHTML = "AO/Tel overhead = " + Eff[1].toFixed(1).toString() + " sec";
-    nirc2_overhead_div.innerHTML = "NIRC2 overhead = " + Eff[2].toFixed(1).toString() + " sec";
-    total_int_div.innerHTML = "Total integration = " + Eff[3].toFixed(1).toString() + " sec";
-    total_elapsed_div.innerHTML = "Total elapsed time = " + Eff[4].toFixed(1).toString() + " sec";
+    Eff_div.innerHTML            = `<h2>Efficiency = ${Eff[0].toFixed(1)}</h2>`;
+    tel_overhead_div.innerHTML   = `AO/Tel overhead = ${Eff[1].toFixed(1)} sec`;
+    nirc2_overhead_div.innerHTML = `NIRC2 overhead = ${Eff[2].toFixed(1)} sec`;
+    total_int_div.innerHTML      = `Total integration = ${Eff[3].toFixed(1)} sec`;
+    total_elapsed_div.innerHTML  = `Total elapsed time = ${Eff[4].toFixed(1)} sec`;
 
-    snr1.value = snrList[1];
-    snr2.value = snrList[2];
-    snr3.value = snrList[3];
-    snr4.value = snrList[4];
-    snr5.value = snrList[5];
-    snr6.value = snrList[6];
-    snr7.value = snrList[7];
-    snr8.value = snrList[8];
-
-    polFrac1.value = polFracList[1];
-    polFrac2.value = polFracList[2];
-    polFrac3.value = polFracList[3];
-    polFrac4.value = polFracList[4];
-    polFrac5.value = polFracList[5];
-    polFrac6.value = polFracList[6];
-    polFrac7.value = polFracList[7];
-    polFrac8.value = polFracList[8];
-
-    // Older simplistic formula (no noise terms)
-    // minExpTime1.value = ((minDetection/polFracList[0])**2)/signalPerUnitTime;
-
-    minExpTime1.value = ((-((minDetection/polFracList[0])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[0])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[0])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime2.value = ((-((minDetection/polFracList[1])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[1])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[1])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime3.value = ((-((minDetection/polFracList[2])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[2])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[2])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime4.value = ((-((minDetection/polFracList[3])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[3])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[3])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime5.value = ((-((minDetection/polFracList[4])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[4])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[4])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime6.value = ((-((minDetection/polFracList[5])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[5])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[5])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime7.value = ((-((minDetection/polFracList[6])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[6])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[6])))/(2*(-1*signalPerUnitTime**2))
-    minExpTime8.value = ((-((minDetection/polFracList[7])**2)*signalPerUnitTime) + Math.sqrt(((minDetection/polFracList[7])**2) - 4*(-1*signalPerUnitTime**2)*(minDetection*noisePerUnitTime/polFracList[7])))/(2*(-1*signalPerUnitTime**2))
-
-    totalInt.value = totalIntTime;
-
-    spectraClear1.value = spectraClear[0];
-    spectraClear2.value = spectraClear[1];
-    spectraClear3.value = spectraClear[2];
-    spectraClear4.value = spectraClear[3];
-    spectraClear5.value = spectraClear[4];
-    spectraClear6.value = spectraClear[5];
-    spectraClear7.value = spectraClear[6];
-    spectraClear8.value = spectraClear[7];
-    spectraClear9.value = spectraClear[8];
-    spectraClear10.value = spectraClear[9];
-    spectraClear11.value = spectraClear[10];
-    spectraClear12.value = spectraClear[11];
-    spectraClear13.value = spectraClear[12];
-    spectraClear14.value = spectraClear[13];
-    spectraClear15.value = spectraClear[14];
-    spectraClear16.value = spectraClear[15];
-    spectraClear17.value = spectraClear[16];
-    spectraClear18.value = spectraClear[17];
-    spectraClear19.value = spectraClear[18];
-    spectraClear20.value = spectraClear[19];
-    spectraClear21.value = spectraClear[20];
-    spectraClear22.value = spectraClear[21];
-    spectraClear23.value = spectraClear[22];
-    spectraClear24.value = spectraClear[23];
-    spectraClear25.value = spectraClear[24];
-    spectraClear26.value = spectraClear[25];
-    spectraClear27.value = spectraClear[26];
-    spectraClear28.value = spectraClear[27];
-    spectraClear29.value = spectraClear[28];
-    spectraClear30.value = spectraClear[29];
-    spectraClear31.value = spectraClear[30];
-    spectraClear32.value = spectraClear[31];
-    spectraClear33.value = spectraClear[32];
-    spectraClear34.value = spectraClear[33];
-    spectraClear35.value = spectraClear[34];
-    spectraClear36.value = spectraClear[35];
-    spectraClear37.value = spectraClear[36];
-    spectraClear38.value = spectraClear[37];
-    spectraClear39.value = spectraClear[38];
-    spectraClear40.value = spectraClear[39];
-
-
-    spectraCloudy1.value = spectraCloudy[0];
-    spectraCloudy2.value = spectraCloudy[1];
-    spectraCloudy3.value = spectraCloudy[2];
-    spectraCloudy4.value = spectraCloudy[3];
-    spectraCloudy5.value = spectraCloudy[4];
-    spectraCloudy6.value = spectraCloudy[5];
-    spectraCloudy7.value = spectraCloudy[6];
-    spectraCloudy8.value = spectraCloudy[7];
-    spectraCloudy9.value = spectraCloudy[8];
-    spectraCloudy10.value = spectraCloudy[9];
-    spectraCloudy11.value = spectraCloudy[10];
-    spectraCloudy12.value = spectraCloudy[11];
-    spectraCloudy13.value = spectraCloudy[12];
-    spectraCloudy14.value = spectraCloudy[13];
-    spectraCloudy15.value = spectraCloudy[14];
-    spectraCloudy16.value = spectraCloudy[15];
-    spectraCloudy17.value = spectraCloudy[16];
-    spectraCloudy18.value = spectraCloudy[17];
-    spectraCloudy19.value = spectraCloudy[18];
-    spectraCloudy20.value = spectraCloudy[19];
-    spectraCloudy21.value = spectraCloudy[20];
-    spectraCloudy22.value = spectraCloudy[21];
-    spectraCloudy23.value = spectraCloudy[22];
-    spectraCloudy24.value = spectraCloudy[23];
-    spectraCloudy25.value = spectraCloudy[24];
-    spectraCloudy26.value = spectraCloudy[25];
-    spectraCloudy27.value = spectraCloudy[26];
-    spectraCloudy28.value = spectraCloudy[27];
-    spectraCloudy29.value = spectraCloudy[28];
-    spectraCloudy30.value = spectraCloudy[29];
-    spectraCloudy31.value = spectraCloudy[30];
-    spectraCloudy32.value = spectraCloudy[31];
-    spectraCloudy33.value = spectraCloudy[32];
-    spectraCloudy34.value = spectraCloudy[33];
-    spectraCloudy35.value = spectraCloudy[34];
-    spectraCloudy36.value = spectraCloudy[35];
-    spectraCloudy37.value = spectraCloudy[36];
-    spectraCloudy38.value = spectraCloudy[37];
-    spectraCloudy39.value = spectraCloudy[38];
-    spectraCloudy40.value = spectraCloudy[39];
-
-    contrast1.value = Math.sqrt(moffat(SNR[1], 1, alpha, beta));
-    contrast2.value = Math.sqrt(moffat(SNR[1], 2, alpha, beta));
-    contrast3.value = Math.sqrt(moffat(SNR[1], 3, alpha, beta));
-    contrast4.value = Math.sqrt(moffat(SNR[1], 4, alpha, beta));
-    contrast5.value = Math.sqrt(moffat(SNR[1], 5, alpha, beta));
-    contrast6.value = Math.sqrt(moffat(SNR[1], 6, alpha, beta));
-    contrast7.value = Math.sqrt(moffat(SNR[1], 7, alpha, beta));
-    contrast8.value = Math.sqrt(moffat(SNR[1], 8, alpha, beta));
-    contrast9.value = Math.sqrt(moffat(SNR[1], 9, alpha, beta));
-    contrast10.value = Math.sqrt(moffat(SNR[1], 10, alpha, beta));
-    contrast11.value = Math.sqrt(moffat(SNR[1], 11, alpha, beta));
-    contrast12.value = Math.sqrt(moffat(SNR[1], 12, alpha, beta));
-    contrast13.value = Math.sqrt(moffat(SNR[1], 13, alpha, beta));
-    contrast14.value = Math.sqrt(moffat(SNR[1], 14, alpha, beta));
-    contrast15.value = Math.sqrt(moffat(SNR[1], 15, alpha, beta));
-    contrast16.value = Math.sqrt(moffat(SNR[1], 16, alpha, beta));
-    contrast17.value = Math.sqrt(moffat(SNR[1], 17, alpha, beta));
-    contrast18.value = Math.sqrt(moffat(SNR[1], 18, alpha, beta));
-    contrast19.value = Math.sqrt(moffat(SNR[1], 19, alpha, beta));
-    contrast20.value = Math.sqrt(moffat(SNR[1], 20, alpha, beta));
-    
+    // Plot from state
+    plot_snr_from_state();
+    plot_pol_snr_from_state();
+    plot_spectra_from_state();
+    plot_contrast_from_state();
 }
-
 
