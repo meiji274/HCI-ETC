@@ -118,13 +118,6 @@ function getTargetLabel(){
   return sel ? sel.value : '';
 }
 
-
-// Sets values from elements list
-function setValuesFrom(list, startIndex, elems) {
-  const take = Math.min(elems.length, Math.max(0, list.length - startIndex));
-  setValues(elems, list.slice(startIndex, startIndex + take));
-}
-
 // Read in the spectra files
 let spectraClear = [];
 let spectraCloudy = [];
@@ -143,8 +136,8 @@ function attachSpectrumReader(inputId, setter) {
   });
 }
 
-attachSpectrumReader('spectraClear',  arr => { G.spectraClear  = arr.slice(0, 40); });
-attachSpectrumReader('spectraCloudy', arr => { G.spectraCloudy = arr.slice(0, 40); });
+attachSpectrumReader('spectraClear',  arr => { G.spectraClear  = arr; });
+attachSpectrumReader('spectraCloudy', arr => { G.spectraCloudy = arr; });
 
 // Define Moffat distribution
 var beta = 4.765;
@@ -196,14 +189,6 @@ function calculate_Z(mag, zp, filter_band, strehl, Eff, SA) {
 }
 
 
-function calculate_sky_bkg(Z, S, arcsec_per_px) {
-    // """
-    // output: sky background in counts/s/px
-    // """
-    return (arcsec_per_px**2) * (10**(.4*(Z - S)));
-}
-
-
 function calculate_SNR(N_obj, npix, sky_bkg, nreads, exp_time, readout_noise, dark_current) {
     // """
     // calculate signal-to-noise (SNR) ratio for object given flux counts and various noise parameters
@@ -229,127 +214,131 @@ function calculate_SNR(N_obj, npix, sky_bkg, nreads, exp_time, readout_noise, da
 //////////////////////////////////////////////////////
 // Plot functions that read from G, not the DOM
 //////////////////////////////////////////////////////
-
 function plot_snr_from_state() {
-  const totalInt = Number(G.totalInt) || 0;
-  // You previously used snr indices 1..8 at x = 1/4..2 * totalInt
-  const points = [
-    { x: 0, y: 0 },
-    ...G.snrList.slice(1, 9).map((y, i) => ({
-      x: totalInt * ((i + 1) / 4),
-      y: Number(y) || 0
-    }))
-  ];
+    const points = G.snrList.map((y, i) => ({
+        x: Number(G.ExpTimeList[i]) || 0,
+        y: Number(y) || 0
+    }));
 
-  const ctx = document.getElementById('snrChart').getContext('2d');
-  if (snrChartInst) snrChartInst.destroy();
-  snrChartInst = new Chart(ctx, {
-    type: 'scatter',
-    data: {
-      datasets: [{
-        label: getTargetLabel(),
-        data: points,
-        showLine: true,
-        pointStyle: 'line',
-        borderColor: 'black',
-        pointBackgroundColor: 'black',
-        fill: false
-      }]
-    },
-    options: {
-      title: { display: true, text: 'SNR v. Exposure Time (s)', fontSize: 20 },
-      responsive: false,
-      scales: {
-        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Exposure Time (s)' } }],
-        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'SNR' } }]
-      }
-    }
-  });
+    const ctx = document.getElementById('snrChart').getContext('2d');
+    if (snrChartInst) snrChartInst.destroy();
+    snrChartInst = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets: [{ label: getTargetLabel(), data: points, showLine: true, pointStyle: 'line', borderColor: 'black', pointBackgroundColor: 'black', fill: false }]},
+        options: {
+            title: { display: true, text: 'SNR v. Exposure Time (s)', fontSize: 20 },
+            responsive: false,
+            scales: {
+                xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Exposure Time (s)' } }],
+                yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'SNR' } }]
+            }
+        }
+    });
+}
+
+function linspace(start, end, n){
+    if (n <= 1) return [start];
+    const step = (end - start) / (n - 1);
+    return Array.from({length: n}, (_, i) => start + i * step);
 }
 
 function plot_pol_snr_from_state() {
-  const data = G.minExpValues.map((t, i) => ({
-    x: Number(t) / 3600,                   // sec → hr
-    y: Number(G.polFracList[i + 1]) * 100  // you used indices 1..8 for polFrac
-  }));
+    const data = G.minExpValues.map((t, i) => ({
+        x: Number(t) / 3600,  // sec → hr
+        y: Number(G.polFracList[i]) * 100
+    }));
+;
 
   const ctx = document.getElementById('snrPolChart').getContext('2d');
   if (snrPolChartInst) snrPolChartInst.destroy();
-  snrPolChartInst = new Chart(ctx, {
-    type: 'scatter',
-    data: {
-      datasets: [{
-        label: getTargetLabel(),
-        data,
-        showLine: true,
-        borderColor: 'red',
-        pointBackgroundColor: 'red',
-        fill: false
-      }]
+    snrPolChartInst = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+            label: getTargetLabel(),
+            data,
+            showLine: true,
+            borderColor: 'red',
+            pointBackgroundColor: 'red',
+            fill: false
+        }]
     },
-    options: {
-      title: { display: true, text: 'Polarization Fraction (%) vs. Minimum Detection Exposure Time (hr)', fontSize: 20 },
-      responsive: false,
-      scales: {
-        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Minimum Detection Threshold Exposure Time (hr)' } }],
-        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Polarization Fraction (%)' } }]
-      }
-    }
-  });
+        options: {
+            title: { display: true, text: 'Polarization Fraction (%) vs. Minimum Detection Exposure Time (hr)', fontSize: 20 },
+            responsive: false,
+            scales: {
+                xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Minimum Detection Threshold Exposure Time (hr)' } }],
+                yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Polarization Fraction (%)' } }]
+            }
+        }
+    });
 }
 
+
 function plot_spectra_from_state() {
-  // Build wavelengths 600 → 850 nm (40 points)
-  const xs = Array.from({ length: 40 }, (_, i) => 600 + (250 * i) / 39);
-  const clearData  = xs.map((x, i) => ({ x, y: Number(G.spectraClear[i])  || 0 }));
-  const cloudyData = xs.map((x, i) => ({ x, y: Number(G.spectraCloudy[i]) || 0 }));
+  const xsClear  = linspace(600, 850, Math.max(1, G.spectraClear.length  || 0));
+  const xsCloudy = linspace(600, 850, Math.max(1, G.spectraCloudy.length || 0));
+
+  const clearData  = xsClear.map((x, i)  => ({ x, y: Number(G.spectraClear[i])  || 0 }));
+  const cloudyData = xsCloudy.map((x, i) => ({ x, y: Number(G.spectraCloudy[i]) || 0 }));
 
   const ctx = document.getElementById('spectraClearChart').getContext('2d');
-  if (spectraClearChartInst) spectraClearChartInst.destroy();
-  spectraClearChartInst = new Chart(ctx, {
-    type: 'scatter',
-    data: {
-      datasets: [
-        { label: 'Clear target atmosphere',  data: clearData,  showLine: true, pointStyle: 'line', borderColor: 'blue',  pointBackgroundColor: 'blue',  fill: false },
-        { label: 'Cloudy target atmosphere', data: cloudyData, showLine: true, pointStyle: 'line', borderColor: 'gray',  pointBackgroundColor: 'gray',  fill: false }
-      ]
+    if (spectraClearChartInst) spectraClearChartInst.destroy();
+        spectraClearChartInst = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                { label: 'Clear target atmosphere',  data: clearData,  showLine: true, pointStyle: 'line', borderColor: 'blue',  pointBackgroundColor: 'blue',  fill: false },
+                { label: 'Cloudy target atmosphere', data: cloudyData, showLine: true, pointStyle: 'line', borderColor: 'gray',  pointBackgroundColor: 'gray',  fill: false }
+        ]
     },
     options: {
-      title: { display: true, text: 'Target Spectrum (R band)', fontSize: 20 },
-      responsive: false,
-      scales: {
-        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Wavelength (nm)' } }],
-        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Flux (counts) * 1e22' } }]
-      }
+        title: { display: true, text: 'Target Spectrum', fontSize: 20 },
+        responsive: false,
+        scales: {
+            xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Wavelength (nm)' } }],
+            yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Flux' } }]
+        }
     }
   });
 }
 
 function plot_contrast_from_state() {
-  const data = G.contrastList.map((y, i) => ({ x: i + 1, y: Number(y) || 0 }));
+    const xs = G.contrastR || [];
+    const ys = G.contrastList || [];
+    const data = xs.map((x, i) => ({ x, y: Number(ys[i]) || 0 }));
 
-  const ctx = document.getElementById('contrastChart').getContext('2d');
-  if (contrastChartInst) contrastChartInst.destroy();
-  contrastChartInst = new Chart(ctx, {
-    type: 'scatter',
-    data: {
-      datasets: [{
-        label: getTargetLabel(),
-        data,
-        showLine: true,
-        pointStyle: 'line',
-        borderColor: 'orange',
-        pointBackgroundColor: 'orange',
-        fill: false
+    const ctx = document.getElementById('contrastChart').getContext('2d');
+    if (contrastChartInst) contrastChartInst.destroy();
+        contrastChartInst = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: getTargetLabel(),
+                data,
+                showLine: true,
+                pointStyle: 'line',
+                borderColor: 'orange',
+                pointBackgroundColor: 'orange',
+                fill: false
       }]
     },
     options: {
-      title: { display: true, text: 'Speckle noise vs. angular separation', fontSize: 20 },
-      responsive: false,
-      scales: {
-        xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Angular separation (λ/D)' } }],
-        yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Speckle noise (counts)' } }]
-      }
+        title: { display: true, text: 'Speckle noise vs. angular separation', fontSize: 20 },
+        responsive: false,
+        scales: {
+            xAxes: [{ 
+                type: 'linear',
+                position: 'bottom',
+                scaleLabel: { display: true, labelString: 'Angular separation (λ/D)' },
+                ticks: {
+                    min: xs.length ? Math.min(...xs) : 0,
+                    max: xs.length ? Math.max(...xs) : 1,
+                    // stepSize: xs.length > 1 ? (xs[1] - xs[0]) : undefined
+                    }
+                }],
+            yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Speckle noise (counts)' } }]
+        }
     }
   });
 }
@@ -579,54 +568,16 @@ function doCalc() {
     var camera_text = camera.options[camera.selectedIndex].value;
 
     var n_exp = coadds * Ndither * repeats;
-    
-    // arcseconds per pixel for different cameras
-    var arcsec_per_px;
-
-    if (camera_text == 'Narrow') {
-        arcsec_per_px = .01;
-    }   else if (camera_text == 'Medium') {
-        arcsec_per_px = .02;
-    }   else if (camera_text == 'Wide') {
-        arcsec_per_px = .04;
-    }
-
-    // Assigns variables based on filter
-    if (filter_text == 'J') {
-        var dI = dI_J;
-        var zeropoint = z_J;
-        var Sky_background = S_J;
-    }   else if (filter_text == 'H') {
-        var dI = dI_H;
-        var zeropoint = z_H;
-        var Sky_background = S_H;
-    }   else if (filter_text == 'K') {
-        var dI = dI_K;
-        var zeropoint = z_K;
-        var Sky_background = S_K;
-    }   else if (filter_text == 'Kp') {
-        var dI = dI_Kp;
-        var zeropoint = z_Kp;
-        var Sky_background = S_Kp;
-    }   else if (filter_text == 'Lp') {
-        var dI = dI_Lp;
-        var zeropoint = z_Lp;
-        var Sky_background = S_Lp;
-    }   else if (filter_text == 'Ms') {
-        var dI = dI_Ms;
-        var zeropoint = z_Ms;
-        var Sky_background = S_Ms;
-    }
 
 
-    // set samp_mode based on number of reads
+    // Set samp_mode based on number of reads
     var samp_mode;
     if (nreads > 2) samp_mode = 3;
     	else samp_mode = 2;
     
 
     // read in html div variables
-    var snr_div = document.getElementById("SNR_div");
+    var SNR_div = document.getElementById("SNR_div");
     var N_obj_div = document.getElementById("N_obj_div");
     var npix_div = document.getElementById("npix_div");
     var noise_div = document.getElementById("noise_div");
@@ -638,71 +589,75 @@ function doCalc() {
     var total_int_div = document.getElementById("total_int_div");
     var total_elapsed_div = document.getElementById("total_elapsed_div");
 
-    // Plot elements
-    const spectraClearEls  = getElems('spectraClear', 40);
-    const spectraCloudyEls = getElems('spectraCloudy', 40);
-    const contrastEls      = getElems('contrast', 20);
-    const snrEls           = getElems('snr', 8);
-    const polFracEls       = getElems('polFrac', 8);
-    const minExpTimeEls    = getElems('minExpTime', 8);
+    // Calculate baseline SNR and Efficiency for current form inputs
+    const baseSNR = nirc2_s2n(Mag, filter_text, camera_text, n_exp, ExpTime, strehl, nreads);
+    const Eff  = n2_eff(ExpTime, coadds, repeats, samp_mode, nreads, array_size, aomode, Ndither, laser_motion);
 
-    // Calculate SNR and efficiency. These functions output arrays containing the different output elements. (ie the variables SNR and Eff should be arrays)
-    var SNR = nirc2_s2n(Mag, filter_text, camera_text, n_exp, ExpTime, strehl, nreads);
-    var Eff = n2_eff(ExpTime, coadds, repeats, samp_mode, nreads, array_size, aomode, Ndither, laser_motion);
-    
-    var totalIntTime = Eff[3];
-    var signalPerUnitTime = SNR[1]/totalIntTime;
-    var noisePerUnitTime = Math.sqrt((SNR[3]**2)/totalIntTime)                           
+    const totalIntTime      = Eff[3];
+    const signalPerUnitTime = baseSNR[1] / totalIntTime;
+    const noisePerUnitTime  = Math.sqrt((baseSNR[3] ** 2) / totalIntTime);
 
-    // Calculate SNR as function of ExpTime for plotting purposes
-    var snrList = [];
-    var ExpTimeList = [];
-    var polFracList = [];
+    /////////////////////
+    // How many samples?
+    const samples = Math.max(2, Number(document.getElementById('snrSamples')?.value) || 9);
 
-    var i;
-    for (i = 0; i < 9; i++) {
-        var nirc2_output = nirc2_s2n(Mag, filter_text, camera_text, n_exp, ExpTime*i/4, strehl, nreads);
+    // Rebuild lists dynamically
+    const snrList = [];
+    const ExpTimeList = [];
+    const polFracList = [];
 
-        snrList.push(nirc2_output[0]);
-        ExpTimeList.push(totalIntTime*i/4);
-        polFracList.push(polFrac*(i+1)/4);
+    // sample i from 0..samples-1 across your 0 → 2*totalIntTime
+    // Here I keep your original “i/4” spacing behavior but generalized:
+    //   i goes 0..samples-1, multiply ExpTime by i/4 to keep old meaning
+    for (let i = 0; i < samples; i++) {
+    const tint_i = ExpTime * (i / 4);
+    const out_i = nirc2_s2n(Mag, filter_text, camera_text, n_exp, tint_i, strehl, nreads);
+    snrList.push(out_i[0]);
+    ExpTimeList.push(totalIntTime * (i / 4));     // consistent with earlier x’s
+    polFracList.push(polFrac * (i + 1) / 4);      // matches original scaling idea
     }
 
-    // set the values from the SNR and polarization fraction lists
-    setValuesFrom(snrList,      1, snrEls);
-    setValuesFrom(polFracList,  1, polFracEls);
-
-    // Min exposure times: compute in a loop instead of 8 separate lines
-    const minExpValues = polFracList.slice(0, 8).map((pf) => {
-        const A = -Math.pow(minDetection / pf, 2) * signalPerUnitTime;
-        const B = Math.pow(minDetection / pf, 2) - 4 * (-1 * signalPerUnitTime ** 2) * (minDetection * noisePerUnitTime / pf);
-        const denom = 2 * (-1 * signalPerUnitTime ** 2);
-        return (A + Math.sqrt(B)) / denom; // your quadratic solution
+    // Min exposure times: make it the same length as polFracList
+    const minExpValues = polFracList.map((pf) => {
+    const A = -Math.pow(minDetection / pf, 2) * signalPerUnitTime;
+    const B = Math.pow(minDetection / pf, 2) - 4 * (-1 * signalPerUnitTime ** 2) * (minDetection * noisePerUnitTime / pf);
+    const denom = 2 * (-1 * signalPerUnitTime ** 2);
+    return (A + Math.sqrt(Math.max(B, 0))) / denom; // seconds
     });
-    setValues(minExpTimeEls, minExpValues);
 
-    // Fill spectra inputs
-    setValues(spectraClearEls,  spectraClear.slice(0, spectraClearEls.length));
-    setValues(spectraCloudyEls, spectraCloudy.slice(0, spectraCloudyEls.length));
+    // Contrast radii (λ/D)
+    let owa = parseFloat(document.getElementById('owa')?.value);
+    let iwa = parseFloat(document.getElementById('iwa')?.value);
+    let dr  = parseFloat(document.getElementById('dr')?.value);
 
-    // Save to state instead of writing to DOM inputs
+    // // Defaults + guards
+    // if (!isFinite(owa)) owa = 20;
+    // if (!isFinite(iwa)) iwa = 0;
+    // if (!isFinite(dr)  || dr <= 0) dr = 1;
+    // if (owa < iwa) { const tmp = iwa; iwa = owa; owa = tmp; }
+
+    // Build r = iwa, iwa+dr, ... ≤ owa (inclusive with an epsilon)
+    const rVals = [];
+    for (let r = iwa; r <= owa + 1e-9; r += dr) rVals.push(+r.toFixed(6));
+
+    G.contrastR    = rVals;
+    G.contrastList = rVals.map(r => Math.sqrt(moffat(baseSNR[1], r, alpha, beta)));
+
+    // Update the state we plot from
     G.totalInt      = Eff[3];
     G.ExpTimeList   = ExpTimeList;
-    G.snrList       = snrList.slice();           // 0..8
-    G.polFracList   = polFracList.slice();       // 0..8
-    G.minExpValues  = minExpValues.slice(0, 8);  // ensure 8
-    G.contrastList  = Array.from({length: 20}, (_, i) =>
-    Math.sqrt(moffat(SNR[1], i + 1, alpha, beta))
-    );
+    G.snrList       = snrList;   
+    G.polFracList   = polFracList;  
+    G.minExpValues  = minExpValues;
 
     // If files were selected, readers already populated G.spectraClear/Cloudy
 
     // Update the div variables to display in html 
-    SNR_div.innerHTML            = `<h2>SNR = ${SNR[0].toFixed(1)}</h2>`;
-    N_obj_div.innerHTML          = `Total signal = ${SNR[1].toFixed(1)} DN`;
-    npix_div.innerHTML           = `Aperture area = ${SNR[2].toFixed(1)} pix`;
-    noise_div.innerHTML          = `Total noise = ${SNR[3].toFixed(1)} DN`;
-    sky_bkg_div.innerHTML        = `Background per frame = ${SNR[4].toFixed(1)} DN`;
+    SNR_div.innerHTML            = `<h2>SNR = ${baseSNR[0].toFixed(1)}</h2>`;
+    N_obj_div.innerHTML          = `Total signal = ${baseSNR[1].toFixed(1)} DN`;
+    npix_div.innerHTML           = `Aperture area = ${baseSNR[2].toFixed(1)} pix`;
+    noise_div.innerHTML          = `Total noise = ${baseSNR[3].toFixed(1)} DN`;
+    sky_bkg_div.innerHTML        = `Background per frame = ${baseSNR[4].toFixed(1)} DN`;
 
     Eff_div.innerHTML            = `<h2>Efficiency = ${Eff[0].toFixed(1)}</h2>`;
     tel_overhead_div.innerHTML   = `AO/Tel overhead = ${Eff[1].toFixed(1)} sec`;

@@ -218,7 +218,25 @@
         Input Cloudy Spectra <input type="file" id="spectraCloudy" name="spectraCloudy" accept=".txt,.csv" />
         <br>
         <br>
+        <p>
+        <label for="snrSamples"># SNR samples:</label>
+        <input type="number" id="snrSamples" value="9" min="2" step="1" />
+        </p>
+        <p>
+        <label for="iwa">Inner working angle (λ/D):</label>
+        <input type="number" id="iwa" value="0" min="0" step="0.1" />
+        </p>
+        <p>
+        <label for="owa">Outer working angle (λ/D):</label>
+        <input type="number" id="owa" value="20" min="1" step="1" />
+        </p>
+        <p>
+        <label for="dr">Radial step Δr (λ/D):</label>
+        <input type="number" id="dr" value="1" min="0.1" step="0.1" />
+        </p>
+        <div class="button-wrap">
         <button type="button" onclick="doCalc()">Update Calculation</button>
+        </div>
         <br>
     </p>
 
@@ -245,7 +263,7 @@
     <br>
 
     <div class="flex-parent jc-center">
-        <fieldset style="width:550px;height:430px;float:left">
+        <fieldset style="width:550px;height:430px">
         <canvas id="snrChart" width="500" height="400"></canvas>
         </fieldset>
 
@@ -256,7 +274,7 @@
             <br>
 
         <div class="flex-parent jc-center">
-            <fieldset style="width:550px;height:430px;float:left">
+            <fieldset style="width:550px;height:430px">
                 <canvas id="spectraClearChart" width="500" height="400"></canvas>
             </fieldset>
 
