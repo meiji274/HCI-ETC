@@ -12,19 +12,16 @@ for (let i = 0; i < 3; i++) {
     imageList[i].src = `etc_pic${i+1}.png`;
 }
 
-
 function switchImage() {
   const sel = document.getElementById('instrument');
   const idx = Number(sel.value);       // 0,1,2 as in your HTML
   document.getElementById('myImage').src = imageList[idx].src;
 }
 
-
 function chooseInstrument() {
     var instrumentName = document.getElementById("instrument");
     var instrumentNameText = instrumentName.options[instrumentName.selectedIndex].text;
 }
-
 
 function changeButton() {
     var presetButton = document.getElementById("usePreset");
@@ -39,24 +36,6 @@ function changeButton() {
     }
 }
 
-
-
-//////////////////////////////////////////////////////////////////////
-// Helper functions to get and set arrays of elements with ids like 
-// `${prefix}1`, `${prefix}2`, ..., `${prefix}{count}`
-//////////////////////////////////////////////////////////////////////
-function getElems(prefix, count) {
-  return Array.from({ length: count }, (_, i) =>
-    document.getElementById(`${prefix}${i + 1}`)
-  );
-}
-
-// Helper: set values from an array into a list of inputs
-function setValues(elems, values) {
-  elems.forEach((el, i) => {
-    if (el && values[i] != null) el.value = values[i];
-  });
-}
 
 /////////////////////////////////////////////////////////////////////
 // Target dictionary with photometric values for a range of filters
@@ -101,12 +80,16 @@ $("#Target").change(function () {
 const G = {
   totalInt: 0,
   ExpTimeList: [],
-  snrList: [],         // length 9 (index 0..8) from your loop
-  polFracList: [],     // length 9 (index 0..8) from your loop
-  minExpValues: [],    // length 8
-  spectraClear: [],    // up to 40 lines (numbers)
-  spectraCloudy: [],   // up to 40 lines (numbers)
-  contrastList: []     // length 20
+  snrList: [],
+  polFracList: [],
+  minExpValues: [],
+  spectraClear: [],
+  spectraCloudy: [],
+  contrastList: [], 
+  spectraClearX: [],
+  spectraClearY: [],
+  spectraCloudyX: [],
+  spectraCloudyY: []
 };
 
 // Keep chart instances to destroy/recreate cleanly
@@ -122,6 +105,40 @@ function getTargetLabel(){
 let spectraClear = [];
 let spectraCloudy = [];
 
+function parseTwoColumnXY(text) {
+  const xs = [], ys = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (!raw) continue;
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+
+    // Split by comma OR any whitespace
+    const parts = line.split(/[,\s]+/).filter(Boolean);
+
+    // Skip a header row like: wavelength,flux
+    if (i === 0 && (isNaN(Number(parts[0])) || isNaN(Number(parts[1])))) {
+      continue;
+    }
+
+    if (parts.length < 2) {
+      throw new Error(`Line ${i + 1} must have two numeric columns (got ${parts.length}).`);
+    }
+
+    const x = Number(parts[0]);
+    const y = Number(parts[1]);
+    if (!isFinite(x) || !isFinite(y)) {
+      throw new Error(`Line ${i + 1} has non-numeric data: "${parts[0]}", "${parts[1]}".`);
+    }
+    xs.push(x);
+    ys.push(y);
+  }
+
+  if (xs.length === 0) throw new Error('No (x,y) rows found.');
+  return { xs, ys };
+}
+
 function attachSpectrumReader(inputId, setter) {
   const input = document.getElementById(inputId);
   if (!input) return;
@@ -129,15 +146,22 @@ function attachSpectrumReader(inputId, setter) {
     if (this.files.length === 0) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const arr = reader.result.split(/\r?\n/).map(Number).filter(v => !Number.isNaN(v));
-      setter(arr);
+      try {
+        const { xs, ys } = parseTwoColumnXY(reader.result);
+        setter(xs, ys);
+        // Optional: replot immediately after load
+        plot_spectra_from_state();
+      } catch (err) {
+        alert(`Error parsing ${this.files[0].name}: ${err.message}`);
+        setter([], []);
+      }
     };
     reader.readAsText(this.files[0]);
   });
 }
 
-attachSpectrumReader('spectraClear',  arr => { G.spectraClear  = arr; });
-attachSpectrumReader('spectraCloudy', arr => { G.spectraCloudy = arr; });
+attachSpectrumReader('spectraClear',  (xs, ys) => { G.spectraClearX  = xs; G.spectraClearY  = ys; });
+attachSpectrumReader('spectraCloudy', (xs, ys) => { G.spectraCloudyX = xs; G.spectraCloudyY = ys; });
 
 // Define Moffat distribution
 var beta = 4.765;
@@ -151,68 +175,8 @@ function moffat(I_0, r, alpha, beta) {
 }
 
 
-// Calculation functions
-function convert_mag_to_counts(mag, zp) {
-    // """
-    // mag: magnitude 
-    // zp: photometric zeropoint
-    
-    // output: counts * s^-1 * m^-2 * micron^-1 
-    
-    // See link for calculation of flux from photometric zeropoint: 
-    //     https://www.stsci.edu/documents/dhb/web/c32_wfpc2dataanal.fm1.html
-    // """    
-    return 10**(.4*(zp - mag));
-}
-
-
-function calculate_N_obj(mag, zp, filter_band, exp_time, Eff, SA) {
-    // """
-    // calculate total counts for object given various parameters
-    
-    // mag: magnitude
-    // zp: photometric zeropoint 
-    // filter_band: filter band width (e.g. J,H,K,etc.) [micron]
-    // exp_time: exposure time [s]
-    // Eff: detector quantum efficiency 
-    // SA: primary mirror surface area [m^2]
-    // """
-    return convert_mag_to_counts(mag, zp) * filter_band * exp_time * Eff * SA;
-}
-
-
-function calculate_Z(mag, zp, filter_band, strehl, Eff, SA) {
-
-    return mag + 2.5*Math.log10(convert_mag_to_counts(mag, zp)*filter_band*Eff*SA);
-
-    //return mag + 2.5*Math.log10(convert_mag_to_counts(mag, zp)*filter_band*Eff*SA) - 2.5*Math.log10(strehl);
-}
-
-
-function calculate_SNR(N_obj, npix, sky_bkg, nreads, exp_time, readout_noise, dark_current) {
-    // """
-    // calculate signal-to-noise (SNR) ratio for object given flux counts and various noise parameters
-    
-    // N_obj: total photon counts from object [e-]
-    // npix: number of pixels in detector image
-    // sky_bkg: photon counts from sky background per pixel per second [e-/px/s]
-    // nreads: number of reads
-    // dark_current: dark current noise [e-/px/s]; default value is .1 e-/px/s (see table above) which 
-    //                 is a conservative upper limit
-    // exp_time: exposure time
-    // readout_noise: base readout noise in CDS mode (2 reads) per pixel [e-/px]; default value is 38 e-/px
-    //                 see link: https://www2.keck.hawaii.edu/koa/public/nirc2/nirc2_data_form.html
-    // """
-    var readout_noise_reduced = readout_noise/Math.sqrt(nreads)
-    
-    var snr_output = N_obj/Math.sqrt(N_obj + npix*sky_bkg*exp_time + npix*(readout_noise_reduced**2) + npix*dark_current*exp_time);
-    
-    return snr_output;
-}
-
-
 //////////////////////////////////////////////////////
-// Plot functions that read from G, not the DOM
+// Plotting functions that read from G
 //////////////////////////////////////////////////////
 function plot_snr_from_state() {
     const points = G.snrList.map((y, i) => ({
@@ -276,31 +240,28 @@ function plot_pol_snr_from_state() {
 
 
 function plot_spectra_from_state() {
-  const xsClear  = linspace(600, 850, Math.max(1, G.spectraClear.length  || 0));
-  const xsCloudy = linspace(600, 850, Math.max(1, G.spectraCloudy.length || 0));
+    const clearData  = (G.spectraClearX || []).map((x, i)  => ({ x, y: Number(G.spectraClearY[i])  || 0 }));
+    const cloudyData = (G.spectraCloudyX || []).map((x, i) => ({ x, y: Number(G.spectraCloudyY[i]) || 0 }));
 
-  const clearData  = xsClear.map((x, i)  => ({ x, y: Number(G.spectraClear[i])  || 0 }));
-  const cloudyData = xsCloudy.map((x, i) => ({ x, y: Number(G.spectraCloudy[i]) || 0 }));
-
-  const ctx = document.getElementById('spectraClearChart').getContext('2d');
+    const ctx = document.getElementById('spectraClearChart').getContext('2d');
     if (spectraClearChartInst) spectraClearChartInst.destroy();
-        spectraClearChartInst = new Chart(ctx, {
+    spectraClearChartInst = new Chart(ctx, {
         type: 'scatter',
         data: {
             datasets: [
-                { label: 'Clear target atmosphere',  data: clearData,  showLine: true, pointStyle: 'line', borderColor: 'blue',  pointBackgroundColor: 'blue',  fill: false },
-                { label: 'Cloudy target atmosphere', data: cloudyData, showLine: true, pointStyle: 'line', borderColor: 'gray',  pointBackgroundColor: 'gray',  fill: false }
-        ]
-    },
+                { label: 'Clear target atmosphere',  data: clearData,  showLine: true, pointStyle: 'line', borderWidth: 1, borderColor: 'blue',  pointBackgroundColor: 'blue',  fill: false },
+                { label: 'Cloudy target atmosphere', data: cloudyData, showLine: true, pointStyle: 'line', borderWidth: 1, borderColor: 'gray',  pointBackgroundColor: 'gray',  fill: false }
+            ]
+        },
     options: {
         title: { display: true, text: 'Target Spectrum', fontSize: 20 },
         responsive: false,
         scales: {
-            xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Wavelength (nm)' } }],
-            yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Flux' } }]
+            xAxes: [{ type: 'linear', position: 'bottom', scaleLabel: { display: true, labelString: 'Wavelength (same units as file)' } }],
+            yAxes: [{ type: 'linear', position: 'left',   scaleLabel: { display: true, labelString: 'Flux (counts)' } }]
         }
-    }
-  });
+        }
+    });
 }
 
 function plot_contrast_from_state() {
